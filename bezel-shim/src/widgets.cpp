@@ -1,0 +1,410 @@
+// widgets.cpp — widget constructors and the shared widget API.
+//
+// Constructors follow Qt ownership: a non-null parent makes Qt own the
+// object; a null parent hands ownership to the caller (Racket attaches
+// finalizers). All Qt work goes through on_gui.
+
+#include "internal.h"
+
+#include <QApplication>
+#include <QBuffer>
+
+#include <cstdlib>
+#include <QByteArray>
+#include <QCheckBox>
+#include <QComboBox>
+#include <QLabel>
+#include <QLineEdit>
+#include <QListWidget>
+#include <QMainWindow>
+#include <QPixMap>
+#include <QPlainTextEdit>
+#include <QProgressBar>
+#include <QPushButton>
+#include <QSlider>
+#include <QSpinBox>
+#include <QWidget>
+
+namespace {
+
+using namespace bezel;
+
+QWidget* resolve_widget(bezel_handle h, const char* what) {
+    return resolve_as<QWidget>(h, what);
+}
+
+}  // namespace
+
+// ---- constructors -------------------------------------------------------
+
+using namespace bezel;
+
+BEZEL_EXPORT bezel_handle bezel_window_new(void) {
+    return on_gui([]() -> bezel_handle { return register_object(new QMainWindow()); });
+}
+
+BEZEL_EXPORT bezel_handle bezel_widget_new(bezel_handle parent) {
+    return on_gui([parent]() -> bezel_handle {
+        QWidget* p = parent ? resolve_widget(parent, "bezel_widget_new") : nullptr;
+        if (parent && !p) return nullptr;
+        return register_object(new QWidget(p));
+    });
+}
+
+BEZEL_EXPORT bezel_handle bezel_label_new(const char* text, bezel_handle parent) {
+    return on_gui([text, parent]() -> bezel_handle {
+        QWidget* p = parent ? resolve_widget(parent, "bezel_label_new") : nullptr;
+        if (parent && !p) return nullptr;
+        return register_object(new QLabel(QString::fromUtf8(text ? text : ""), p));
+    });
+}
+
+BEZEL_EXPORT bezel_handle bezel_button_new(const char* text, bezel_handle parent) {
+    return on_gui([text, parent]() -> bezel_handle {
+        QWidget* p = parent ? resolve_widget(parent, "bezel_button_new") : nullptr;
+        if (parent && !p) return nullptr;
+        return register_object(new QPushButton(QString::fromUtf8(text ? text : ""), p));
+    });
+}
+
+BEZEL_EXPORT bezel_handle bezel_checkbox_new(const char* text, bezel_handle parent) {
+    return on_gui([text, parent]() -> bezel_handle {
+        QWidget* p = parent ? resolve_widget(parent, "bezel_checkbox_new") : nullptr;
+        if (parent && !p) return nullptr;
+        return register_object(new QCheckBox(QString::fromUtf8(text ? text : ""), p));
+    });
+}
+
+BEZEL_EXPORT bezel_handle bezel_lineedit_new(const char* text, bezel_handle parent) {
+    return on_gui([text, parent]() -> bezel_handle {
+        QWidget* p = parent ? resolve_widget(parent, "bezel_lineedit_new") : nullptr;
+        if (parent && !p) return nullptr;
+        return register_object(new QLineEdit(QString::fromUtf8(text ? text : ""), p));
+    });
+}
+
+BEZEL_EXPORT bezel_handle bezel_textedit_new(bezel_handle parent) {
+    return on_gui([parent]() -> bezel_handle {
+        QWidget* p = parent ? resolve_widget(parent, "bezel_textedit_new") : nullptr;
+        if (parent && !p) return nullptr;
+        return register_object(new QPlainTextEdit(p));
+    });
+}
+
+BEZEL_EXPORT bezel_handle bezel_combo_new(bezel_handle parent) {
+    return on_gui([parent]() -> bezel_handle {
+        QWidget* p = parent ? resolve_widget(parent, "bezel_combo_new") : nullptr;
+        if (parent && !p) return nullptr;
+        return register_object(new QComboBox(p));
+    });
+}
+
+BEZEL_EXPORT bezel_handle bezel_spinbox_new(bezel_handle parent) {
+    return on_gui([parent]() -> bezel_handle {
+        QWidget* p = parent ? resolve_widget(parent, "bezel_spinbox_new") : nullptr;
+        if (parent && !p) return nullptr;
+        return register_object(new QSpinBox(p));
+    });
+}
+
+BEZEL_EXPORT bezel_handle bezel_slider_new(int vertical, bezel_handle parent) {
+    return on_gui([vertical, parent]() -> bezel_handle {
+        QWidget* p = parent ? resolve_widget(parent, "bezel_slider_new") : nullptr;
+        if (parent && !p) return nullptr;
+        const Qt::Orientation o = vertical ? Qt::Vertical : Qt::Horizontal;
+        return register_object(new QSlider(o, p));
+    });
+}
+
+BEZEL_EXPORT bezel_handle bezel_progress_new(bezel_handle parent) {
+    return on_gui([parent]() -> bezel_handle {
+        QWidget* p = parent ? resolve_widget(parent, "bezel_progress_new") : nullptr;
+        if (parent && !p) return nullptr;
+        return register_object(new QProgressBar(p));
+    });
+}
+
+BEZEL_EXPORT bezel_handle bezel_list_new(bezel_handle parent) {
+    return on_gui([parent]() -> bezel_handle {
+        QWidget* p = parent ? resolve_widget(parent, "bezel_list_new") : nullptr;
+        if (parent && !p) return nullptr;
+        return register_object(new QListWidget(p));
+    });
+}
+
+// ---- QWidget shared API --------------------------------------------------
+
+BEZEL_EXPORT int bezel_widget_show(bezel_handle h) {
+    return on_gui([h]() -> int {
+        QWidget* w = resolve_widget(h, "bezel_widget_show");
+        if (!w) return 0;
+        w->show();
+        note_window_shown();  // arms quit-on-last-window-closed for the pump
+        return 1;
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_close(bezel_handle h) {
+    return on_gui([h]() -> int {
+        QWidget* w = resolve_widget(h, "bezel_widget_close");
+        if (!w) return 0;
+        return w->close() ? 1 : 0;
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_hide(bezel_handle h) {
+    return on_gui([h]() -> int {
+        QWidget* w = resolve_widget(h, "bezel_widget_hide");
+        if (!w) return 0;
+        w->hide();
+        return 1;
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_set_enabled(bezel_handle h, int enabled) {
+    return on_gui([h, enabled]() -> int {
+        QWidget* w = resolve_widget(h, "bezel_widget_set_enabled");
+        if (!w) return 0;
+        w->setEnabled(enabled != 0);
+        return 1;
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_is_enabled(bezel_handle h) {
+    return on_gui([h]() -> int {
+        QWidget* w = resolve_widget(h, "bezel_widget_is_enabled");
+        return w ? (w->isEnabled() ? 1 : 0) : -1;
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_resize(bezel_handle h, int w, int hgt) {
+    return on_gui([h, w, hgt]() -> int {
+        QWidget* widget = resolve_widget(h, "bezel_widget_resize");
+        if (!widget) return 0;
+        widget->resize(w, hgt);
+        return 1;
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_move(bezel_handle h, int x, int y) {
+    return on_gui([h, x, y]() -> int {
+        QWidget* w = resolve_widget(h, "bezel_widget_move");
+        if (!w) return 0;
+        w->move(x, y);
+        return 1;
+    });
+}
+
+BEZEL_EXPORT int bezel_window_set_title(bezel_handle h, const char* title) {
+    return on_gui([h, title]() -> int {
+        QWidget* w = resolve_widget(h, "bezel_window_set_title");
+        if (!w) return 0;
+        w->setWindowTitle(QString::fromUtf8(title ? title : ""));
+        return 1;
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_set_stylesheet(bezel_handle h, const char* qss) {
+    return on_gui([h, qss]() -> int {
+        QWidget* w = resolve_widget(h, "bezel_widget_set_stylesheet");
+        if (!w) return 0;
+        w->setStyleSheet(QString::fromUtf8(qss ? qss : ""));
+        return 1;
+    });
+}
+
+BEZEL_EXPORT const unsigned char* bezel_widget_grab_png(bezel_handle h, int* len_out) {
+    return on_gui([h, len_out]() -> const unsigned char* {
+        QWidget* w = resolve_widget(h, "bezel_widget_grab_png");
+        if (!w || !len_out) {
+            if (len_out) *len_out = 0;
+            set_error("bezel_widget_grab_png: dead or unknown handle %p", h);
+            return nullptr;
+        }
+        const QPixmap pm = w->grab();
+        QByteArray png;
+        QBuffer buf(&png);
+        buf.open(QIODevice::WriteOnly);
+        pm.toImage().save(&buf, "PNG");
+        const auto n = static_cast<size_t>(png.size());
+        void* copy = std::malloc(n > 0 ? n : 1);
+        if (!copy) {
+            *len_out = 0;
+            set_error("bezel_widget_grab_png: out of memory");
+            return nullptr;
+        }
+        std::memcpy(copy, png.constData(), n);
+        *len_out = static_cast<int>(n);
+        return static_cast<const unsigned char*>(copy);
+    });
+}
+
+// ---- value API -----------------------------------------------------------
+
+BEZEL_EXPORT int bezel_widget_set_text(bezel_handle h, const char* text) {
+    return on_gui([h, text]() -> int {
+        const QString s = QString::fromUtf8(text ? text : "");
+        if (auto* w = resolve_as<QLabel>(h, "bezel_widget_set_text")) { w->setText(s); return 1; }
+        if (auto* w = resolve_as<QPushButton>(h, "bezel_widget_set_text")) { w->setText(s); return 1; }
+        if (auto* w = resolve_as<QCheckBox>(h, "bezel_widget_set_text")) { w->setText(s); return 1; }
+        if (auto* w = resolve_as<QLineEdit>(h, "bezel_widget_set_text")) { w->setText(s); return 1; }
+        if (auto* w = resolve_as<QPlainTextEdit>(h, "bezel_widget_set_text")) { w->setPlainText(s); return 1; }
+        set_error("bezel_widget_set_text: handle %p does not carry text", h);
+        return 0;
+    });
+}
+
+BEZEL_EXPORT const char* bezel_widget_text(bezel_handle h) {
+    return on_gui([h]() -> const char* {
+        QString s;
+        if (auto* w = qobject_cast<QLabel*>(resolve(h))) s = w->text();
+        else if (auto* w = qobject_cast<QPushButton*>(resolve(h))) s = w->text();
+        else if (auto* w = qobject_cast<QCheckBox*>(resolve(h))) s = w->text();
+        else if (auto* w = qobject_cast<QLineEdit*>(resolve(h))) s = w->text();
+        else if (auto* w = qobject_cast<QPlainTextEdit*>(resolve(h))) s = w->toPlainText();
+        else if (auto* w = qobject_cast<QComboBox*>(resolve(h))) s = w->currentText();
+        else if (auto* w = qobject_cast<QListWidget*>(resolve(h))) {
+            if (w->currentItem()) s = w->currentItem()->text();
+        } else {
+            set_error("bezel_widget_text: handle %p does not carry text", h);
+            return nullptr;
+        }
+        return strdup_q(s);
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_set_checked(bezel_handle h, int checked) {
+    return on_gui([h, checked]() -> int {
+        if (auto* w = resolve_as<QCheckBox>(h, "bezel_widget_set_checked")) {
+            w->setChecked(checked != 0);
+            return 1;
+        }
+        return 0;
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_is_checked(bezel_handle h) {
+    return on_gui([h]() -> int {
+        if (auto* w = resolve_as<QCheckBox>(h, "bezel_widget_is_checked")) return w->isChecked() ? 1 : 0;
+        return -1;
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_set_value(bezel_handle h, int value) {
+    return on_gui([h, value]() -> int {
+        if (auto* w = resolve_as<QSlider>(h, "bezel_widget_set_value")) { w->setValue(value); return 1; }
+        if (auto* w = resolve_as<QSpinBox>(h, "bezel_widget_set_value")) { w->setValue(value); return 1; }
+        if (auto* w = resolve_as<QProgressBar>(h, "bezel_widget_set_value")) { w->setValue(value); return 1; }
+        set_error("bezel_widget_set_value: handle %p has no int value", h);
+        return 0;
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_value(bezel_handle h) {
+    return on_gui([h]() -> int {
+        if (auto* w = qobject_cast<QSlider*>(resolve(h))) return w->value();
+        if (auto* w = qobject_cast<QSpinBox*>(resolve(h))) return w->value();
+        if (auto* w = qobject_cast<QProgressBar*>(resolve(h))) return w->value();
+        set_error("bezel_widget_value: handle %p has no int value", h);
+        return -1;
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_set_range(bezel_handle h, int min, int max) {
+    return on_gui([h, min, max]() -> int {
+        if (auto* w = resolve_as<QSlider>(h, "bezel_widget_set_range")) { w->setRange(min, max); return 1; }
+        if (auto* w = resolve_as<QSpinBox>(h, "bezel_widget_set_range")) { w->setRange(min, max); return 1; }
+        if (auto* w = resolve_as<QProgressBar>(h, "bezel_widget_set_range")) { w->setRange(min, max); return 1; }
+        set_error("bezel_widget_set_range: handle %p has no int range", h);
+        return 0;
+    });
+}
+
+BEZEL_EXPORT int bezel_combo_add(bezel_handle h, const char* item) {
+    return on_gui([h, item]() -> int {
+        if (auto* w = resolve_as<QComboBox>(h, "bezel_combo_add")) {
+            w->addItem(QString::fromUtf8(item ? item : ""));
+            return 1;
+        }
+        return 0;
+    });
+}
+
+BEZEL_EXPORT int bezel_combo_current_index(bezel_handle h) {
+    return on_gui([h]() -> int {
+        if (auto* w = resolve_as<QComboBox>(h, "bezel_combo_current_index")) return w->currentIndex();
+        return -1;
+    });
+}
+
+BEZEL_EXPORT const char* bezel_combo_current_text(bezel_handle h) {
+    return on_gui([h]() -> const char* {
+        if (auto* w = resolve_as<QComboBox>(h, "bezel_combo_current_text")) return strdup_q(w->currentText());
+        return nullptr;
+    });
+}
+
+BEZEL_EXPORT int bezel_list_add(bezel_handle h, const char* item) {
+    return on_gui([h, item]() -> int {
+        if (auto* w = resolve_as<QListWidget>(h, "bezel_list_add")) {
+            w->addItem(QString::fromUtf8(item ? item : ""));
+            return 1;
+        }
+        return 0;
+    });
+}
+
+BEZEL_EXPORT int bezel_list_current_row(bezel_handle h) {
+    return on_gui([h]() -> int {
+        if (auto* w = resolve_as<QListWidget>(h, "bezel_list_current_row")) return w->currentRow();
+        return -1;
+    });
+}
+
+BEZEL_EXPORT int bezel_list_set_current_row(bezel_handle h, int row) {
+    return on_gui([h, row]() -> int {
+        if (auto* w = resolve_as<QListWidget>(h, "bezel_list_set_current_row")) {
+            w->setCurrentRow(row);
+            return 1;
+        }
+        return 0;
+    });
+}
+
+BEZEL_EXPORT int bezel_combo_set_index(bezel_handle h, int index) {
+    return on_gui([h, index]() -> int {
+        if (auto* w = resolve_as<QComboBox>(h, "bezel_combo_set_index")) {
+            w->setCurrentIndex(index);
+            return 1;
+        }
+        return 0;
+    });
+}
+
+BEZEL_EXPORT const char* bezel_list_current_text(bezel_handle h) {
+    return on_gui([h]() -> const char* {
+        if (auto* w = resolve_as<QListWidget>(h, "bezel_list_current_text")) {
+            return strdup_q(w->currentItem() ? w->currentItem()->text() : QString());
+        }
+        return nullptr;
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_set_placeholder(bezel_handle h, const char* text) {
+    return on_gui([h, text]() -> int {
+        const QString s = QString::fromUtf8(text ? text : "");
+        if (auto* w = resolve_as<QLineEdit>(h, "bezel_widget_set_placeholder")) { w->setPlaceholderText(s); return 1; }
+        if (auto* w = resolve_as<QPlainTextEdit>(h, "bezel_widget_set_placeholder")) { w->setPlaceholderText(s); return 1; }
+        set_error("bezel_widget_set_placeholder: handle %p has no placeholder", h);
+        return 0;
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_set_readonly(bezel_handle h, int readonly) {
+    return on_gui([h, readonly]() -> int {
+        if (auto* w = resolve_as<QLineEdit>(h, "bezel_widget_set_readonly")) { w->setReadOnly(readonly != 0); return 1; }
+        if (auto* w = resolve_as<QPlainTextEdit>(h, "bezel_widget_set_readonly")) { w->setReadOnly(readonly != 0); return 1; }
+        set_error("bezel_widget_set_readonly: handle %p is not a text input", h);
+        return 0;
+    });
+}

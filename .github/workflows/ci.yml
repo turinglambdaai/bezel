@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    # Build the C++ shim against Qt 6 on all three platforms, then run
+    # the Racket test suite against it headlessly (QT_QPA_PLATFORM=
+    # offscreen): real Qt objects, real signal deliveries, real PNG
+    # grabs — no display needed.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+        racket-version: ['8.12']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Racket
+        uses: Bogdanp/setup-racket@v1.11
+        with:
+          version: ${{ matrix.racket-version }}
+
+      - name: Install Qt6 (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qt6-base-dev qt6-base-dev-tools libgl1-mesa-dev
+          echo "CMAKE_PREFIX_PATH=/usr" >> $GITHUB_ENV
+
+      - name: Install Qt6 (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install qt cmake
+          echo "CMAKE_PREFIX_PATH=$(brew --prefix qt)" >> $GITHUB_ENV
+
+      - name: Install Qt6 (Windows)
+        if: runner.os == 'Windows'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.*'
+          archives: qtbase
+          cache: true
+
+      - name: Configure shim (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: cmake -S bezel-shim -B bezel-shim/build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Configure shim (Windows)
+        if: runner.os == 'Windows'
+        run: cmake -S bezel-shim -B bezel-shim\build -DCMAKE_BUILD_TYPE=Release -G "Visual Studio 17 2022"
+
+      - name: Build shim (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: cmake --build bezel-shim/build -j
+
+      - name: Build shim (Windows)
+        if: runner.os == 'Windows'
+        run: cmake --build bezel-shim\build --config Release -j
+
+      - name: Link Racket packages
+        run: |
+          raco pkg install --auto --no-docs --link ./bezel-lib
+          raco pkg install --auto --no-docs --link ./bezel
+          raco pkg install --auto --no-docs --link ./bezel-test
+          # The umbrella must stay installable: its deps resolve against
+          # the linked packages above.
+          raco pkg install --auto --no-docs --link ./bezel
+
+      - name: Run tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: raco test bezel-test/
+
+      - name: Generate showcase screenshot
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: racket scripts/showcase.rkt docs/showcase.png
+
+      - name: Upload showcase artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: showcase-${{ matrix.os }}
+          path: docs/showcase.png
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Racket
+        uses: Bogdanp/setup-racket@v1.11
+        with:
+          version: '8.12'
+
+      - name: Link packages
+        run: |
+          raco pkg install --auto --no-docs --link ./bezel-lib
+          raco pkg install --auto --no-docs --link ./bezel-doc
+
+      - name: Build documentation
+        run: raco setup --check-docs bezel-doc

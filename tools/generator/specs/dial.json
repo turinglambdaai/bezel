@@ -1,0 +1,16 @@
+{
+  "class": "QDial",
+  "module": "dial",
+  "header": "QDial",
+  "constructors": [
+    { "c-name": "dial-new", "args": ["parent"] }
+  ],
+  "methods": [
+    { "c-name": "dial-set-value",   "qt": "setValue",          "args": ["int"] },
+    { "c-name": "dial-value",       "qt": "value",             "ret": "int" },
+    { "c-name": "dial-set-range",   "qt": "setRange",          "args": ["int", "int"] },
+    { "c-name": "dial-set-wrapping","qt": "setWrapping",       "args": ["bool"] },
+    { "c-name": "dial-set-notch-target", "qt": "setNotchTarget", "args": ["double"] }
+  ],
+  "signals": ["valueChanged(int)", "sliderMoved(int)"]
+}

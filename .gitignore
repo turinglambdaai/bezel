@@ -1,0 +1,33 @@
+# Racket
+compiled/
+*.zo
+*.dep
+*.rkt.zo
+
+# CMake / C++ build output
+bezel-shim/build/
+build/
+cmake-build-*/
+*.o
+*.obj
+*.dylib
+*.so
+*.so.*
+*.dll
+*.dylib.*
+*.exp
+*.lib
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# test / verification artifacts
+*.png.tmp
+docs/showcase-*.png
