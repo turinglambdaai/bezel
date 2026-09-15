@@ -30,6 +30,8 @@
          "errors.rkt"
          "raw.rkt")
 
+;; (re-exported via errors.rkt users; exn:fail:bezel comes from errors)
+
 ;; kind is one of 'widget 'layout 'menu 'action 'object 'application;
 ;; the layout tree builder uses it to pick add-widget vs add-layout.
 (struct bezel-object (ptr kind [owned #:mutable]) #:transparent)
@@ -51,10 +53,16 @@
 (define (bezel-alive? o)
   (= 1 (bezel-object-alive (ptr-of o))))
 
-;; Refuse to operate on dead handles up front so users get a Racket
-;; error naming the call site instead of a shim error mid-flight.
+;; Refuse to operate on dead handles up front. bezel_object_alive does
+;; not set shim errors (finalizers call it on dead handles routinely),
+;; so the message here is built locally — "unknown error" would be
+;; misleading.
 (define (require-alive! who o)
-  (unless (bezel-alive? o) (raise-bezel-error who)))
+  (unless (bezel-alive? o)
+    (raise
+     (exn:fail:bezel
+      (format "bezel: ~a: the Qt object behind this handle has been destroyed" who)
+      (current-continuation-marks)))))
 
 ;; Explicit deletion: after this, the handle is dead.
 (define (bezel-delete! o)
