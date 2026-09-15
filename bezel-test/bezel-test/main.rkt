@@ -216,7 +216,11 @@
             (sleep 0.2)
             (widget-set-text! l "from-another-thread")
             ;; read back through the same marshaling while the widget is
-            ;; alive — run's cleanup destroys the tree afterwards
+            ;; alive — run's cleanup destroys the tree afterwards. The
+            ;; short wait-for tolerates platform scheduling jitter on the
+            ;; setText round trip.
+            (wait-for (lambda ()
+                        (equal? "from-another-thread" (widget-text l))))
             (set-box! seen (widget-text l))
             (sleep 0.2)
             (quit!)))
