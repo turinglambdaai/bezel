@@ -29,13 +29,20 @@ Bezel 把 Qt 6（Widgets）绑定到 Racket：Racket 写应用，三平台原生
   dispatcher 线程，所有 handler 永远不触发。泵的退出条件：`quit!`，或
   「已显示过窗口且当前无可见顶层窗口」（即 quit-on-last-window-closed，
   见 `bezel_app_quit_requested`；`set-quit-on-last-window-closed!` 可关）。
+- **Qt 内联调用的判定是「Racket 主线程」而非 OS 线程**——Racket CS 线程
+  会复用 OS 线程，`QThread::currentThread()` 对工作线程也可能返回"在
+  GUI 线程上"，此时内联调用会把 OS 线程楔死（编组判定在
+  `private/marshal.rkt` 的 `gui`）。
 - **handler 永不直接跑在 Qt 线程上**：Qt 信号 → C++ sink → 队列 →
   dispatcher（Racket 线程）→ 用户过程。
 - **`bezel.h` 里的结构体字段序**：天然对齐字段在前、`int8 tag` 在最后——
   Racket 的 `define-cstruct` 紧凑布局无填充，这是两侧逐字节一致的唯一排法。
   改字段序必须同时改 `private/ctypes.rkt`。
-- **Racket 侧构造器带 `parent` → Qt 持有**（finalizer 停用）；无父 → Racket
-  finalizer `deleteLater`。`layout!` 会自动把所有权移交给 Qt。
+- **所有权/生命周期**：对象活到 app 退出（cleanup 统一销毁）或显式
+  `bezel-delete!`；**没有删除型 finalizer**——迟到的 finalizer 会命中被
+  Qt 释放并复用的堆地址，误删无辜控件（Windows 上实测）。`layout!` 把
+  所有权移交 Qt 仅是语义记录。`bezel-object-delete` 在 unmarshaled
+  排除名单里（finalizer/退场阶段不得经编组队列等待）。
 - **`bezel-cleanup!` 会杀掉 dispatcher 线程**（shutdown 标志）；
   `make-application` 重建 app 时 `ensure-dispatcher!` 负责复活它——
   新增"只启动一次"式的全局资源时，记得同样处理重建场景。

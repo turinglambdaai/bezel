@@ -7,6 +7,19 @@ All notable changes to Bezel are documented here. The format follows
 
 First release: Qt 6 Widgets bound to Racket, end to end.
 
+### Fixed (during stabilization, same release)
+
+- Marshal queue races: enqueue (any caller thread) vs drain (pump) is
+  lock-protected; lost tasks previously surfaced as random CI hangs.
+- Shim errors are replayed across the marshal boundary (thread-local
+  errors never traveled with marshaled calls).
+- Qt inline calls are restricted to the Racket main thread (OS-thread
+  identity checks are unsound under Racket CS thread multiplexing).
+- No deleting finalizers: objects live until teardown or
+  `bezel-delete!` (late finalizers destroyed recycled widget addresses).
+- Quit-on-last-window-closed arms correctly for the pump; window-close
+  exit code no longer leaks from a previous quit!.
+
 ### Added
 
 - **C++ shim** (`bezel-shim/`): stable C ABI over Qt 6 — application
