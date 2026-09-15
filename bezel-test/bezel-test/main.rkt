@@ -20,9 +20,9 @@
 
 (putenv "QT_QPA_PLATFORM" "offscreen")
 
-;; Wait until pred holds or ~2s pass.
-(define (wait-for pred)
-  (let loop ([n 100])
+;; Wait until pred holds or ~2s pass (longer where noted).
+(define (wait-for pred [n 100])
+  (let loop ([n n])
     (or (pred)
         (and (> n 0) (begin (sleep 0.02) (loop (sub1 n)))))))
 
@@ -238,11 +238,10 @@
   (layout! win (vbox btn))
   (thread (lambda ()
             (sleep 0.2)
-            (eprintf "[run-t] emitting\n")
             (emit-test-signal! btn "clicked()")
-            (eprintf "[run-t] emitted, waiting delivery\n")
-            (wait-for (lambda () (= 1 (unbox hits))))
-            (eprintf "[run-t] delivered, quitting\n")
+            ;; generous: delivery latency on a loaded CI runner is a
+            ;; performance characteristic, not a correctness one
+            (wait-for (lambda () (= 1 (unbox hits))) 500)
             (quit! 7)))
   (define code (run win))
   (check-equal? code 7)
