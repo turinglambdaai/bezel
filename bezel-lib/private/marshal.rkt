@@ -37,17 +37,29 @@
   (get-ffi-obj 'bezel_set_last_error bezel-lib (_fun _string/utf-8 -> _void)
                (lambda () (error 'bezel "shim is missing bezel_set_last_error"))))
 
-;; FIFO of marshal-tasks waiting for the GUI thread.
+;; FIFO of marshal-tasks waiting for the GUI thread. Callers enqueue
+;; from any thread while the pump drains on the main thread — every
+;; queue access is under queue-lock (a binary semaphore used as a
+;; mutex; Racket pair mutation is not thread-safe).
+(define queue-lock (make-semaphore 1))
 (define head '())
 (define tail-cell (box #f))
 
+(define (with-lock thunk)
+  (dynamic-wind
+      (lambda () (semaphore-wait queue-lock))
+      thunk
+      (lambda () (semaphore-post queue-lock))))
+
 (define (enqueue! task)
-  (define cell (mcons task '()))
-  (if (null? head)
-      (begin (set! head cell)
-             (set-box! tail-cell cell))
-      (begin (set-mcdr! (unbox tail-cell) cell)
-             (set-box! tail-cell cell))))
+  (with-lock
+   (lambda ()
+     (define cell (mcons task '()))
+     (if (null? head)
+         (begin (set! head cell)
+                (set-box! tail-cell cell))
+         (begin (set-mcdr! (unbox tail-cell) cell)
+                (set-box! tail-cell cell))))))
 
 ;; Run `thunk` on the GUI thread, returning its value. A thunk that
 ;; raises re-raises on the caller. Safe from any thread.
@@ -77,14 +89,20 @@
             result))))
 
 ;; Run every pending queued task. Called from the pump on the main
-;; (GUI) thread. Never call from other threads.
+;; (GUI) thread. Thunks run OUTSIDE the lock (a thunk may wait on its
+;; own handshake, and other threads keep enqueueing meanwhile) — take a
+;; snapshot under the lock, then loop until the queue is empty.
 (define (drain-gui!)
   (let next ()
-    (unless (null? head)
-      (define cell head)
-      (set! head (mcdr cell))
-      (when (null? head) (set-box! tail-cell #f))
-      (define task (mcar cell))
+    (define task
+      (with-lock
+       (lambda ()
+         (and (not (null? head))
+              (let ([cell head])
+                (set! head (mcdr cell))
+                (when (null? head) (set-box! tail-cell #f))
+                (mcar cell))))))
+    (when task
       (define result
         (with-handlers ([(lambda (_e) #t) (lambda (e) e)])
           ((marshal-task-thunk task))))
