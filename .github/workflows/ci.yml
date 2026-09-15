@@ -26,6 +26,10 @@ jobs:
         uses: Bogdanp/setup-racket@v1.11
         with:
           version: ${{ matrix.racket-version }}
+          # macOS runners: brew Qt is arm64, so Racket must be too (the
+          # action defaults to x64, which runs under Rosetta and cannot
+          # dlopen the arm64 shim).
+          architecture: ${{ runner.os == 'macOS' && 'arm64' || 'x64' }}
 
       - name: Install Qt6 (Linux)
         if: runner.os == 'Linux'
