@@ -48,6 +48,7 @@ public:
     bool running = false;         // true between exec() entry and exit
     bool quit_requested = false;  // set by bezel_app_quit
     bool saw_window = false;      // a widget was shown at least once
+    bool had_visible_window = false;  // a pump saw a visible top level
     int quit_code = 0;
 
     static ApplicationState& get() {
@@ -151,6 +152,8 @@ BEZEL_EXPORT int bezel_app_new(const char* name) {
     ApplicationState& s = ApplicationState::get();
     if (s.application) return 1;  // idempotent
     bezel::reset_signal_queue();
+    s.saw_window = false;
+    s.had_visible_window = false;
 
     static int fake_argc = 1;
     static char fake_arg0[] = "bezel";
@@ -186,17 +189,25 @@ BEZEL_EXPORT int bezel_app_set_quit_on_last_window_closed(int enabled) {
 }
 
 // 1 when the pump should stop: explicit quit, or (matching Qt's
-// quitOnLastWindowClosed) a window was shown and none is visible now.
+// quitOnLastWindowClosed) the pump has already seen a visible top-level
+// window in this application's lifetime and none is visible now. The
+// "seen one first" arming keeps app setup and hidden-window phases from
+// stopping a pump that has not actually shown anything yet.
 BEZEL_EXPORT int bezel_app_quit_requested(void) {
     ApplicationState& s = ApplicationState::get();
     if (s.quit_requested) return 1;
-    if (s.saw_window && s.application && s.application->quitOnLastWindowClosed()) {
+    if (s.saw_window && s.had_visible_window && s.application &&
+        s.application->quitOnLastWindowClosed()) {
         const auto top_levels = QApplication::topLevelWidgets();
         bool any_visible = false;
         for (QWidget* w : top_levels) {
             if (w && w->isVisible()) { any_visible = true; break; }
         }
-        if (!any_visible) return 1;
+        if (any_visible) {
+            s.had_visible_window = true;
+            return 0;
+        }
+        return 1;
     }
     return 0;
 }

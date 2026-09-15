@@ -249,4 +249,13 @@
   (dial-set-wrapping dial #t)
   (check-true (bezel-alive? dial)))
 
+(test-case "run: closing the last window stops the pump"
+  (make-application)
+  (define win (make-window #:title "close me" #:size '(200 100)))
+  (thread (lambda ()
+            (sleep 0.3)
+            (widget-close! win)))
+  (define code (run win))
+  (check-equal? code 0 "closing the only window should stop the pump"))
+
 (displayln "bezel-test: all tests passed")
