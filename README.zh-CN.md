@@ -177,7 +177,7 @@ README 的 showcase 图本身由 `scripts/showcase.rkt` 生成——无头环境
 (object-name widget)           ; 命名、重挂父级、GC 安全句柄
 ```
 
-所有权遵循 Qt 父子规则：带父创建 → Qt 持有；无父 → Racket finalizer 清理。`layout!` 自动把所有权移交 Qt。
+所有权遵循 Qt 父子规则：带父创建 → Qt 持有；无父 → Bezel 统一跟踪，应用退出时全部回收（需要提前回收用 `bezel-delete!`）。`layout!` 自动把所有权移交 Qt。这里刻意不做 GC 驱动的删除——迟到的 finalizer 删掉被复用地址上的无辜控件，正是 Bezel 拒绝接受的一类竞态。
 
 ## 仓库结构
 

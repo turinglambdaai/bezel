@@ -114,11 +114,13 @@ Connection plumbing:
 ## Ownership and handles
 
 - A `bezel-object` (Racket) = raw `QObject*` + kind tag + owned flag.
-- **With a parent** (or attached to a layout/window): Qt owns the object;
-  the flag flips and finalizers stand down. `layout!` hands over
-  automatically.
-- **Parentless**: Racket owns it; `register-finalizer` calls
-  `bezel_object_delete` (a `deleteLater`) on GC.
+- **Lifetime**: objects live until application teardown
+  (`bezel-cleanup!`, or `run` returning) destroys the whole
+  QApplication, until their parent chain destroys them, or until an
+  explicit `bezel-delete!`. There are deliberately **no deleting
+  finalizers**: a finalizer firing late can hit a heap address Qt
+  already freed and reused, destroying an innocent widget (observed on
+  Windows). Widget memory is bounded by the app's own widget count.
 - The shim keeps a handle→`QPointer` registry; destroyed objects erase
   their entry, so stale handles fail `bezel-alive?` instead of aliasing
   into a new object at the same address.

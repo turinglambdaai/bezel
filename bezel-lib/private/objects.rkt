@@ -4,11 +4,14 @@
 ;; a `bezel-object` wrapping the raw handle, a kind tag, and an
 ;; ownership flag.
 ;;
-;; Ownership follows Qt's parent rule:
-;;   - created WITHOUT a parent  -> Racket owns it; a finalizer calls
-;;     bezel_object_delete (deleteLater) when the value becomes garbage
-;;   - created WITH a parent, or attached to a layout/window afterwards
-;;     -> Qt owns it; `owned` flips to #f and the finalizer stands down
+;; Lifetime: objects live until the application is torn down
+;; (bezel-cleanup!/run exit destroys the whole QApplication and every
+;; widget with it) or the user calls `bezel-delete!` explicitly.
+;; There are deliberately NO deleting finalizers: a finalizer that
+;; fires late can hit a heap address Qt has already freed and reused
+;; for a different widget, destroying an innocent object (observed on
+;; Windows). `owned` records the parent rule at creation time for
+;; documentation; it no longer schedules deletion.
 ;;
 ;; Handles may outlive their Qt object (user closed a window, parent
 ;; chain deleted it). Use `bezel-alive?` to check; calls on dead handles
@@ -37,16 +40,9 @@
 (struct bezel-object (ptr kind [owned #:mutable]) #:transparent)
 
 (define (wrap-handle ptr kind owned)
-  (define o (bezel-object ptr kind owned))
-  (when owned
-    (register-finalizer
-     o
-     (lambda (obj)
-       ;; The shim no-ops safely when the object is already gone; the
-       ;; deleteLater form is safe even at teardown.
-       (bezel-object-delete (bezel-object-ptr obj))
-       (void))))
-  o)
+  ;; owned is informational (the parent rule at creation time); there
+  ;; are no deleting finalizers — see the lifetime note above.
+  (bezel-object ptr kind owned))
 
 (define (ptr-of o) (bezel-object-ptr o))
 
