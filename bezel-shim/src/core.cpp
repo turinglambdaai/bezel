@@ -196,18 +196,17 @@ BEZEL_EXPORT int bezel_app_set_quit_on_last_window_closed(int enabled) {
 BEZEL_EXPORT int bezel_app_quit_requested(void) {
     ApplicationState& s = ApplicationState::get();
     if (s.quit_requested) return 1;
-    if (s.saw_window && s.had_visible_window && s.application &&
-        s.application->quitOnLastWindowClosed()) {
-        const auto top_levels = QApplication::topLevelWidgets();
+    if (s.saw_window && s.application && s.application->quitOnLastWindowClosed()) {
         bool any_visible = false;
+        const auto top_levels = QApplication::topLevelWidgets();
         for (QWidget* w : top_levels) {
             if (w && w->isVisible()) { any_visible = true; break; }
         }
         if (any_visible) {
-            s.had_visible_window = true;
-            return 0;
+            s.had_visible_window = true;  // arm: we have shown something
+        } else if (s.had_visible_window) {
+            return 1;  // shown before, nothing visible now -> stop the pump
         }
-        return 1;
     }
     return 0;
 }

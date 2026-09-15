@@ -37,7 +37,10 @@
                           bezel-set-last-error
                           bezel-free
                           bezel-on-gui-thread
-                          bezel-object-alive))
+                          bezel-object-alive
+                          ;; finalizers run when the pump may already be
+                          ;; gone; deleteLater is safe from any thread
+                          bezel-object-delete))
          #t)))
 
 (define-syntax (define-bezel stx)

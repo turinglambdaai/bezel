@@ -46,6 +46,7 @@
 (define (run [win #f] #:fps [fps 60.0])
   (make-application)
   (when win (widget-show! win))
+  (set! quit-code 0)  ; window-close exits report 0 unless quit! runs
   (define frame (/ 1.0 fps))
   (let loop ()
     (bezel-process-events 30)   ; pump Qt events (bounded foreign call)
