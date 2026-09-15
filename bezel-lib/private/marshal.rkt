@@ -23,11 +23,14 @@
          racket/mpair
          "lib.rkt")
 
-;; 1 when the calling OS thread is the Qt GUI thread (no marshaling
-;; needed). Bound directly from the shim to avoid a raw.rkt cycle.
-(define bezel-on-gui-thread*
-  (get-ffi-obj 'bezel_on_gui_thread bezel-lib (_fun -> _int)
-               (lambda () (error 'bezel "shim is missing bezel_on_gui_thread"))))
+;; The GUI-thread decision: only the Racket main thread (the one that
+;; loads Bezel and runs the pump) executes Qt calls inline. Every other
+;; Racket thread marshals, always. Asking Qt "is this the GUI thread"
+;; is unsound here: Racket CS threads can multiplex onto the main OS
+;; thread, so a worker thread can *look* like the GUI thread while
+;; another Racket thread is mid-foreign-call on that same OS thread —
+;; an inline Qt call then wedges the OS thread and deadlocks the place.
+(define gui-main-thread (current-thread))
 
 (struct marshal-task (thunk done-sem result-box error-box) #:mutable)
 
@@ -66,10 +69,9 @@
 ;; Run `thunk` on the GUI thread, returning its value. A thunk that
 ;; raises re-raises on the caller. Safe from any thread.
 (define (gui thunk)
-  (eprintf "[gui] entered\n")
-  (if (= 1 (bezel-on-gui-thread*))
+  (if (eq? (current-thread) gui-main-thread)
       (begin
-        (when marshal-debug? (eprintf "[gui] inline on os-thread\n"))
+        (when marshal-debug? (eprintf "[gui] inline on main thread\n"))
         (thunk))
       (let* ([err-box (box #f)]
              [task (marshal-task #f (make-semaphore) (box #f) err-box)])
