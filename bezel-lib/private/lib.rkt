@@ -33,8 +33,13 @@
                                "bezel.dll"))])
     (build-path dir name)))
 
+(define last-try-error #f)
+
 (define (try-ffi path-string)
-  (with-handlers ([exn:fail:filesystem? (lambda (_e) #f)])
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (set! last-try-error (exn-message e))
+                     #f)])
     (ffi-lib path-string)))
 
 (define (try-local-shim)
@@ -49,7 +54,10 @@
      "  Install a prebuilt shim from the releases page, or build it:\n"
      "    cmake -S bezel-shim -B bezel-shim/build -DCMAKE_BUILD_TYPE=Release\n"
      "    cmake --build bezel-shim/build\n"
-     "  If the library lives elsewhere, point $BEZEL_LIBRARY at the file.\n")
+     "  If the library lives elsewhere, point $BEZEL_LIBRARY at the file.\n"
+     (if last-try-error
+         (string-append "  last load attempt: " last-try-error "\n")
+         ""))
     (current-continuation-marks))))
 
 (define bezel-lib

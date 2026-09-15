@@ -76,6 +76,12 @@ jobs:
           # the linked packages above. Install it once, last.
           raco pkg install --auto --no-docs --link ./bezel
 
+      - name: Shim diagnostics (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          ls -la bezel-shim/build/
+          otool -L bezel-shim/build/libbezel*.dylib || true
+
       - name: Run tests
         env:
           QT_QPA_PLATFORM: offscreen
