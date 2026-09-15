@@ -27,7 +27,15 @@
   (get-ffi-obj 'bezel_on_gui_thread bezel-lib (_fun -> _int)
                (lambda () (error 'bezel "shim is missing bezel_on_gui_thread"))))
 
-(struct marshal-task (thunk done-sem result-box))
+(struct marshal-task (thunk done-sem result-box error-box) #:mutable)
+
+;; Direct shim bindings (no marshaling — these are the plumbing).
+(define bezel-last-error*
+  (get-ffi-obj 'bezel_last_error bezel-lib (_fun -> _string/utf-8)
+               (lambda () (error 'bezel "shim is missing bezel_last_error"))))
+(define bezel-set-last-error*
+  (get-ffi-obj 'bezel_set_last_error bezel-lib (_fun _string/utf-8 -> _void)
+               (lambda () (error 'bezel "shim is missing bezel_set_last_error"))))
 
 ;; FIFO of marshal-tasks waiting for the GUI thread.
 (define head '())
@@ -46,11 +54,23 @@
 (define (gui thunk)
   (if (= 1 (bezel-on-gui-thread*))
       (thunk)
-      (let ([task (marshal-task thunk (make-semaphore) (box #f))])
+      (let* ([err-box (box #f)]
+             [task (marshal-task #f (make-semaphore) (box #f) err-box)])
+        ;; The shim's error slot is thread-local: after the thunk runs on
+        ;; the GUI thread, carry its error string back and replay it on
+        ;; the calling thread so `ok!` & co. see the real message.
+        (set-marshal-task-thunk!
+         task
+         (lambda ()
+           (begin0 (thunk)
+             (set-box! err-box (bezel-last-error*)))))
         (enqueue! task)
         (let loop ()
           (unless (sync/timeout 0.005 (marshal-task-done-sem task))
             (loop)))
+        (define err (unbox err-box))
+        (when (and (string? err) (not (equal? "" err)))
+          (bezel-set-last-error* err))
         (define result (unbox (marshal-task-result-box task)))
         (if (exn? result)
             (raise result)

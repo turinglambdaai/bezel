@@ -33,6 +33,7 @@
 (define-bezel bezel-version (_fun -> _int))
 (define-bezel bezel-free (_fun _pointer -> _void))
 (define-bezel bezel-last-error (_fun -> _string/utf-8))
+(define-bezel bezel-set-last-error (_fun _string/utf-8 -> _void))
 
 ; ---- application lifecycle ---------------------------------------------------
 (define-bezel bezel-app-new (_fun _string/utf-8 -> _int))

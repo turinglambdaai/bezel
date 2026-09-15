@@ -60,6 +60,11 @@ BEZEL_EXPORT void bezel_free(void* p);
 /* Last error message on this thread, or NULL. Borrowed — do not free. */
 BEZEL_EXPORT const char* bezel_last_error(void);
 
+/* Set this thread's error slot. The Racket marshal layer replays the
+ * GUI thread's error onto the calling thread, because thread-local
+ * errors never cross the marshal boundary on their own. */
+BEZEL_EXPORT void bezel_set_last_error(const char* msg);
+
 /* ------------------------------------------------------------------ */
 /* Application lifecycle                                               */
 /* ------------------------------------------------------------------ */

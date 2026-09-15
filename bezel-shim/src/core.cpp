@@ -140,6 +140,11 @@ BEZEL_EXPORT const char* bezel_last_error(void) {
     return t_last_error.empty() ? nullptr : t_last_error.c_str();
 }
 
+BEZEL_EXPORT void bezel_set_last_error(const char* msg) {
+    if (msg && *msg) t_last_error = msg;
+    else t_last_error.clear();
+}
+
 // ---- exported: application lifecycle -----------------------------------
 
 BEZEL_EXPORT int bezel_app_new(const char* name) {
