@@ -9,12 +9,19 @@
 
 (require (for-syntax racket/base)
          ffi/unsafe
+         racket/function
          racket/string
          "ctypes.rkt"
-         "lib.rkt")
+         "lib.rkt"
+         "marshal.rkt")
 
 ;; Custom definer: Racket kebab-case names map to C snake_case symbols
-;; (bezel-widget-new -> bezel_widget_new).
+;; (bezel-widget-new -> bezel_widget_new). Every binding routes through
+;; `gui` (private/marshal.rkt) so calls made from any non-GUI thread are
+;; marshaled onto the Qt GUI thread. The exclusion list covers calls
+;; that must run (or are safe) on the calling thread: the dispatcher's
+;; queue poll, the thread-local error pair, memory release, the thread
+;; check, and the liveness probe (finalizers hit it on dead handles).
 (define (c-symbol id-sym)
   (string->symbol (string-replace (symbol->string id-sym) "-" "_")))
 
@@ -23,11 +30,26 @@
     (error 'bezel "shim is missing C symbol ~a (is libbezel up to date?)"
            (c-symbol id-sym))))
 
+(begin-for-syntax
+  (define (unmarshaled? id-sym)
+    (and (member id-sym '(bezel-next-signal
+                          bezel-last-error
+                          bezel-set-last-error
+                          bezel-free
+                          bezel-on-gui-thread
+                          bezel-object-alive))
+         #t)))
+
 (define-syntax (define-bezel stx)
   (syntax-case stx ()
     [(_ name type)
-     #'(define name
-         (get-ffi-obj (c-symbol 'name) bezel-lib type (make-missing 'name)))]))
+     (if (unmarshaled? (syntax-e #'name))
+         #'(define name
+             (get-ffi-obj (c-symbol 'name) bezel-lib type (make-missing 'name)))
+         #'(define name
+             (let ([raw (get-ffi-obj (c-symbol 'name) bezel-lib type (make-missing 'name))])
+               (lambda args
+                 (gui (lambda () (apply raw args)))))))]))
 
 ; ---- library / memory / errors ---------------------------------------------
 (define-bezel bezel-version (_fun -> _int))

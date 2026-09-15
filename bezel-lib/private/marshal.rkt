@@ -66,6 +66,7 @@
 ;; Run `thunk` on the GUI thread, returning its value. A thunk that
 ;; raises re-raises on the caller. Safe from any thread.
 (define (gui thunk)
+  (eprintf "[gui] entered\n")
   (if (= 1 (bezel-on-gui-thread*))
       (begin
         (when marshal-debug? (eprintf "[gui] inline on os-thread\n"))
