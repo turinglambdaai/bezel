@@ -17,6 +17,8 @@
 (provide gui
          drain-gui!)
 
+(define marshal-debug? (getenv "BEZEL_MARSHAL_DEBUG"))
+
 (require ffi/unsafe
          racket/mpair
          "lib.rkt")
@@ -65,7 +67,9 @@
 ;; raises re-raises on the caller. Safe from any thread.
 (define (gui thunk)
   (if (= 1 (bezel-on-gui-thread*))
-      (thunk)
+      (begin
+        (when marshal-debug? (eprintf "[gui] inline on os-thread\n"))
+        (thunk))
       (let* ([err-box (box #f)]
              [task (marshal-task #f (make-semaphore) (box #f) err-box)])
         ;; The shim's error slot is thread-local: after the thunk runs on
@@ -77,13 +81,18 @@
            (begin0 (thunk)
              (set-box! err-box (bezel-last-error*)))))
         (enqueue! task)
-        (let loop ()
+        (when marshal-debug? (eprintf "[gui] enqueued, waiting\n"))
+        (let loop ([n 0])
           (unless (sync/timeout 0.005 (marshal-task-done-sem task))
-            (loop)))
+            (when (and marshal-debug? (zero? (modulo n 100)))
+              (eprintf "[gui] still waiting (~a)\n" n))
+            (loop (add1 n))))
         (define err (unbox err-box))
         (when (and (string? err) (not (equal? "" err)))
           (bezel-set-last-error* err))
         (define result (unbox (marshal-task-result-box task)))
+        (when marshal-debug?
+          (eprintf "[gui] done err=~a result=~a\n" err (if (exn? result) 'exn result)))
         (if (exn? result)
             (raise result)
             result))))
@@ -93,6 +102,8 @@
 ;; own handshake, and other threads keep enqueueing meanwhile) — take a
 ;; snapshot under the lock, then loop until the queue is empty.
 (define (drain-gui!)
+  (when (and marshal-debug? (not (null? head)))
+    (eprintf "[drain] pending tasks\n"))
   (let next ()
     (define task
       (with-lock

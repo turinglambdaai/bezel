@@ -90,6 +90,7 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           BEZEL_TEST_PROGRESS: '1'
+          BEZEL_MARSHAL_DEBUG: '1'
         timeout-minutes: 8
         run: raco test bezel-test/
 
