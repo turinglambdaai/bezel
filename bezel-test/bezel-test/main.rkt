@@ -9,6 +9,15 @@
 (require rackunit
          bezel)
 
+;; Progress tracing: CI hangs are invisible without knowing the last
+;; case that started. Enabled with BEZEL_TEST_PROGRESS=1.
+(when (getenv "BEZEL_TEST_PROGRESS")
+  (current-test-case-around
+   (lambda (thunk)
+     (eprintf "[case] ~a\n" (current-test-name))
+     (flush-output)
+     (thunk))))
+
 (putenv "QT_QPA_PLATFORM" "offscreen")
 
 ;; Wait until pred holds or ~2s pass.

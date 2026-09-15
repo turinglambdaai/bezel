@@ -89,6 +89,8 @@ jobs:
       - name: Run tests
         env:
           QT_QPA_PLATFORM: offscreen
+          BEZEL_TEST_PROGRESS: '1'
+        timeout-minutes: 8
         run: raco test bezel-test/
 
       - name: Generate showcase screenshot
