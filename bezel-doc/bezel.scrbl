@@ -1,6 +1,5 @@
 #lang scribble/doc
 @(require scribble/manual
-          scribble/baseline
           (for-label bezel
                      racket/base))
 
@@ -16,7 +15,6 @@ Linux.
 @section{Quick start}
 
 @racketblock[
-#lang racket/base
 (require bezel)
 
 (define n (box 0))
@@ -64,5 +62,5 @@ names follow @tt{make-widget} / @tt{widget-set-text!} conventions:
  @item{Signals: @racket[connect!], @racket[disconnect!],
        @racket[emit-test-signal!]}
  @item{Object model: @racket[bezel-alive?], @racket[bezel-delete!],
-       @racket[object-name]}
+       @racket[qt-object-name]}
  @item{Verification: @racket[widget-grab-png] — real PNG bytes of any widget}]

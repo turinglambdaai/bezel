@@ -17,7 +17,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMainWindow>
-#include <QPixMap>
+#include <QPixmap>
 #include <QPlainTextEdit>
 #include <QProgressBar>
 #include <QPushButton>

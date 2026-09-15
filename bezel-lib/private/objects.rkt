@@ -20,8 +20,8 @@
          bezel-alive?
          bezel-delete!
          adopt-by-qt!
-         object-name
-         set-object-name!
+         qt-object-name
+         set-qt-object-name!
          object-set-parent!
          cstring->string/utf8
          require-alive!)
@@ -65,15 +65,17 @@
 ;; reparents objects); finalizer stands down.
 (define (adopt-by-qt! o) (set-bezel-object-owned! o #f))
 
-(define (object-name o)
-  (require-alive! 'object-name o)
-  (define p (ok-string 'object-name (bezel-object-name (ptr-of o))))
+;; Named qt-object-name (not object-name) to avoid clashing with
+;; racket/base's object-name for procedures.
+(define (qt-object-name o)
+  (require-alive! 'qt-object-name o)
+  (define p (ok-string 'qt-object-name (bezel-object-name (ptr-of o))))
   (begin0 (cstring->string/utf8 p)
     (bezel-free p)))
 
-(define (set-object-name! o name)
-  (require-alive! 'set-object-name! o)
-  (ok! 'set-object-name! (bezel-object-set-name (ptr-of o) name)))
+(define (set-qt-object-name! o name)
+  (require-alive! 'set-qt-object-name! o)
+  (ok! 'set-qt-object-name! (bezel-object-set-name (ptr-of o) name)))
 
 (define (object-set-parent! o parent)
   (require-alive! 'object-set-parent! o)

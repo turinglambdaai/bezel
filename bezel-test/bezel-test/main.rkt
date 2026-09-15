@@ -34,8 +34,8 @@
 
 (test-case "objects: names"
   (define w (make-widget))
-  (set-object-name! w "kid")
-  (check-equal? (object-name w) "kid")
+  (set-qt-object-name! w "kid")
+  (check-equal? (qt-object-name w) "kid")
   (check-true (bezel-alive? w)))
 
 ;; ---- widgets ---------------------------------------------------------------
@@ -91,7 +91,7 @@
   (combo-add! combo "beta")
   (check-equal? (combo-current-index combo) 0)
   (check-equal? (combo-current-text combo) "alpha")
-  (define lst (make-list))
+  (define lst (make-list-widget))
   (list-add! lst "one")
   (list-add! lst "two")
   (check-equal? (list-current-row lst) -1 "no selection yet")

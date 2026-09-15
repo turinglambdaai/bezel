@@ -17,7 +17,7 @@
          make-spin-box
          make-slider
          make-progress
-         make-list
+         make-list-widget
 
          widget-show!
          widget-hide!
@@ -103,7 +103,9 @@
                'widget (not parent)))
 
 (define (make-progress [parent #f]) (spawn 'make-progress bezel-progress-new parent))
-(define (make-list [parent #f]) (spawn 'make-list bezel-list-new parent))
+;; Named make-list-widget (not make-list) to avoid clashing with
+;; racket/list's make-list.
+(define (make-list-widget [parent #f]) (spawn 'make-list-widget bezel-list-new parent))
 
 ;; ---- QWidget shared API ------------------------------------------------------
 

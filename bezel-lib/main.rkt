@@ -39,7 +39,7 @@
  (all-from-out "dialogs.rkt")
  ;; signals
  (all-from-out "signals.rkt")
- ;; object model (bezel-alive?, bezel-delete!, object-name, ...)
+ ;; object model (bezel-alive?, bezel-delete!, qt-object-name, ...)
  (all-from-out "private/objects.rkt")
  ;; error type (exn:fail:bezel? and friends)
  (all-from-out "private/errors.rkt"))

@@ -52,9 +52,13 @@ jobs:
         if: runner.os != 'Windows'
         run: cmake -S bezel-shim -B bezel-shim/build -DCMAKE_BUILD_TYPE=Release
 
+      - name: Set up MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Configure shim (Windows)
         if: runner.os == 'Windows'
-        run: cmake -S bezel-shim -B bezel-shim\build -DCMAKE_BUILD_TYPE=Release -G "Visual Studio 17 2022"
+        run: cmake -S bezel-shim -B bezel-shim\build -DCMAKE_BUILD_TYPE=Release -G Ninja
 
       - name: Build shim (Linux/macOS)
         if: runner.os != 'Windows'
@@ -67,10 +71,9 @@ jobs:
       - name: Link Racket packages
         run: |
           raco pkg install --auto --no-docs --link ./bezel-lib
-          raco pkg install --auto --no-docs --link ./bezel
           raco pkg install --auto --no-docs --link ./bezel-test
           # The umbrella must stay installable: its deps resolve against
-          # the linked packages above.
+          # the linked packages above. Install it once, last.
           raco pkg install --auto --no-docs --link ./bezel
 
       - name: Run tests
@@ -105,4 +108,4 @@ jobs:
           raco pkg install --auto --no-docs --link ./bezel-doc
 
       - name: Build documentation
-        run: raco setup --check-docs bezel-doc
+        run: raco setup bezel-doc

@@ -16,7 +16,7 @@
 
 (define n (box 0))
 (define count (make-label "0"))
-(set-object-name! count "count")
+(set-qt-object-name! count "count")
 
 (define plus (make-button "+ 1"))
 (define reset (make-button "reset"))
