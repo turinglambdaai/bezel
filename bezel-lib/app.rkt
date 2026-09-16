@@ -19,6 +19,10 @@
 ;; Racket only tracks existence, so there is no handle to finalize.
 (struct application-token (name) #:transparent)
 
+;; Exit code requested via quit! and reported by run. Window-close
+;; exits report 0 (run resets this at entry).
+(define quit-code 0)
+
 ;; Create the QApplication. Idempotent — later calls return the existing
 ;; application (call again after bezel-cleanup! to start a new one).
 ;; Must run once at startup, before creating any widget.
@@ -71,14 +75,11 @@
 ;; Pump the event loop for up to `ms` milliseconds without blocking in
 ;; exec — used by offscreen tests and non-blocking loops.
 (define (process-events! [ms 50])
-  (begin0 (ok! 'process-events! (bezel-process-events ms))
-    (drain-gui!)))
+  (ok! 'process-events! (bezel-process-events ms))
+  (drain-gui!))
 
 ;; Release application-level state (flush deferred deletions, destroy
 ;; the QApplication). `run` does this automatically; idempotent.
 (define (bezel-cleanup!)
   (ok! 'bezel-cleanup! (bezel-cleanup))
   (set-current-application! #f))
-
-;; quit! stores the requested code for `run` to return.
-(define quit-code 0)

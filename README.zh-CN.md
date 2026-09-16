@@ -68,7 +68,7 @@ Racket 自带的 `racket/gui` 可以用，但很难做出产品级的界面样�
 | Application / 运行循环（泵） | ✅ | ✅ | ✅ |
 | 核心控件（13）+ 布局（4） | ✅ | ✅ | ✅ |
 | 菜单 + 动作 | ✅ | ✅ | ✅ |
-| 信号（类型化：bool / int / QString） | ✅ | ✅ | ✅ |
+| 信号（类型化：bool / int / double / QString） | ✅ | ✅ | ✅ |
 | 跨线程控件访问 | ✅ | ✅ | ✅ |
 | QSS 样式 | ✅ | ✅ | ✅ |
 | `widget-grab-png`（截图） | ✅ | ✅ | ✅ |

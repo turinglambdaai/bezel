@@ -60,8 +60,6 @@ public:
 
 QApplication* app() { return ApplicationState::get().application; }
 
-bool loop_running() { return ApplicationState::get().running; }
-
 bool on_gui_thread() {
     ApplicationState& s = ApplicationState::get();
     if (!s.application) return true;  // pre-app calls run inline (Racket layer forbids them anyway)

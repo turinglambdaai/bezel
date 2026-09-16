@@ -26,6 +26,7 @@ public slots:
     void dispatch0();
     void dispatchB(bool a);
     void dispatchI(int a);
+    void dispatchD(double a);
     void dispatchS(const QString& a);
 
 public:

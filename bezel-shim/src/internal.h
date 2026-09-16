@@ -100,7 +100,6 @@ auto on_gui(F&& f) -> decltype(f()) {
 
 // QApplication access. Returns nullptr before bezel_app_new.
 class QApplication* app();
-bool loop_running();
 
 // Duplicate a QString as a UTF-8 C string (bezel_free-able) or nullptr.
 char* strdup_q(const QString& s);

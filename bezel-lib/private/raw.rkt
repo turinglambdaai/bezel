@@ -9,7 +9,6 @@
 
 (require (for-syntax racket/base)
          ffi/unsafe
-         racket/function
          racket/string
          "ctypes.rkt"
          "lib.rkt"

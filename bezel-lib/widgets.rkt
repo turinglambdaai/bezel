@@ -54,10 +54,12 @@
          "private/objects.rkt"
          "private/raw.rkt")
 
-;; helper: create + wrap a widget with the standard parent/ownership rule
-(define (spawn who raw-fn parent)
+;; Create + wrap a widget with the standard parent/ownership rule.
+;; `build` receives the resolved parent pointer (or #f) and constructs
+;; the raw handle; a null parent means Racket tracks the object.
+(define (spawn who build parent)
   (require-application)
-  (wrap-handle (ok-handle who (raw-fn (and parent (ptr-of parent))))
+  (wrap-handle (ok-handle who (build (and parent (ptr-of parent))))
                'widget (not parent)))
 
 ;; ---- constructors ---------------------------------------------------------
@@ -73,39 +75,41 @@
   (when stylesheet (set-widget-stylesheet! win stylesheet))
   win)
 
-(define (make-widget [parent #f]) (spawn 'make-widget bezel-widget-new parent))
+(define (make-widget [parent #f])
+  (spawn 'make-widget (lambda (p) (bezel-widget-new p)) parent))
+
 (define (make-label text [parent #f])
-  (require-application)
-  (wrap-handle (ok-handle 'make-label (bezel-label-new text (and parent (ptr-of parent))))
-               'widget (not parent)))
+  (spawn 'make-label (lambda (p) (bezel-label-new text p)) parent))
+
 (define (make-button text [parent #f])
-  (require-application)
-  (wrap-handle (ok-handle 'make-button (bezel-button-new text (and parent (ptr-of parent))))
-               'widget (not parent)))
+  (spawn 'make-button (lambda (p) (bezel-button-new text p)) parent))
+
 (define (make-checkbox text [parent #f])
-  (require-application)
-  (wrap-handle (ok-handle 'make-checkbox (bezel-checkbox-new text (and parent (ptr-of parent))))
-               'widget (not parent)))
+  (spawn 'make-checkbox (lambda (p) (bezel-checkbox-new text p)) parent))
+
 (define (make-line-edit [text ""] [parent #f])
-  (require-application)
-  (wrap-handle (ok-handle 'make-line-edit (bezel-lineedit-new text (and parent (ptr-of parent))))
-               'widget (not parent)))
-(define (make-text-edit [parent #f]) (spawn 'make-text-edit bezel-textedit-new parent))
-(define (make-combo [parent #f]) (spawn 'make-combo bezel-combo-new parent))
-(define (make-spin-box [parent #f]) (spawn 'make-spin-box bezel-spinbox-new parent))
+  (spawn 'make-line-edit (lambda (p) (bezel-lineedit-new text p)) parent))
+
+(define (make-text-edit [parent #f])
+  (spawn 'make-text-edit (lambda (p) (bezel-textedit-new p)) parent))
+
+(define (make-combo [parent #f])
+  (spawn 'make-combo (lambda (p) (bezel-combo-new p)) parent))
+
+(define (make-spin-box [parent #f])
+  (spawn 'make-spin-box (lambda (p) (bezel-spinbox-new p)) parent))
 
 ;; (make-slider #:vertical? #t) for a vertical slider.
 (define (make-slider #:vertical? [vertical? #f] [parent #f])
-  (require-application)
-  (wrap-handle (ok-handle 'make-slider
-                          (bezel-slider-new (if vertical? 1 0)
-                                                (and parent (ptr-of parent))))
-               'widget (not parent)))
+  (spawn 'make-slider (lambda (p) (bezel-slider-new (if vertical? 1 0) p)) parent))
 
-(define (make-progress [parent #f]) (spawn 'make-progress bezel-progress-new parent))
+(define (make-progress [parent #f])
+  (spawn 'make-progress (lambda (p) (bezel-progress-new p)) parent))
+
 ;; Named make-list-widget (not make-list) to avoid clashing with
 ;; racket/list's make-list.
-(define (make-list-widget [parent #f]) (spawn 'make-list-widget bezel-list-new parent))
+(define (make-list-widget [parent #f])
+  (spawn 'make-list-widget (lambda (p) (bezel-list-new p)) parent))
 
 ;; ---- QWidget shared API ------------------------------------------------------
 

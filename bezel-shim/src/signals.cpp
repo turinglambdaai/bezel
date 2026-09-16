@@ -153,6 +153,13 @@ void SignalSink::dispatchI(int a) {
     deliver(1, &v);
 }
 
+void SignalSink::dispatchD(double a) {
+    bezel_variant v{};
+    v.tag = BEZEL_VT_DOUBLE;
+    v.d = a;
+    deliver(1, &v);
+}
+
 void SignalSink::dispatchS(const QString& a) {
     bezel_variant v{};
     v.tag = BEZEL_VT_STRING;
@@ -165,20 +172,24 @@ void SignalSink::deliver_variants(int argc, const bezel_variant* argv) {
     switch (argv[0].tag) {
         case BEZEL_VT_INT: dispatchI(static_cast<int>(argv[0].i)); break;
         case BEZEL_VT_BOOL: dispatchB(argv[0].i != 0); break;
-        case BEZEL_VT_DOUBLE: dispatchS(QString::number(argv[0].d)); break;
+        case BEZEL_VT_DOUBLE: dispatchD(argv[0].d); break;
         case BEZEL_VT_STRING: dispatchS(QString::fromUtf8(argv[0].s ? argv[0].s : "")); break;
         default: dispatch0(); break;
     }
 }
 
+namespace {
+// Pick the sink slot matching the signal's first parameter type.
 QByteArray slot_for_signal(const QMetaMethod& sig) {
     if (sig.parameterCount() == 0) return "dispatch0()";
     const QByteArray t = sig.parameterMetaType(0).name();
     if (t == "bool") return "dispatchB(bool)";
     if (t == "int" || t == "uint" || t == "long" || t == "qint32") return "dispatchI(int)";
+    if (t == "double" || t == "qreal") return "dispatchD(double)";
     if (t == "QString") return "dispatchS(QString)";
     return "dispatch0()";  // parameter types not converted yet: deliver argless
 }
+}  // namespace
 
 // forward decl from internal.h usage below
 int64_t sink_connect(QObject* target, const QByteArray& norm_sig) {

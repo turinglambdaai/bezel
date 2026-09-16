@@ -66,7 +66,7 @@ The deep dive is in [docs/architecture.md](docs/architecture.md).
 | Application / run loop (pump) | ✅ | ✅ | ✅ |
 | Core widgets (13) + layouts (4) | ✅ | ✅ | ✅ |
 | Menus + actions | ✅ | ✅ | ✅ |
-| Signals (typed: bool / int / QString) | ✅ | ✅ | ✅ |
+| Signals (typed: bool / int / double / QString) | ✅ | ✅ | ✅ |
 | Cross-thread widget access | ✅ | ✅ | ✅ |
 | QSS styling | ✅ | ✅ | ✅ |
 | `widget-grab-png` (screenshot) | ✅ | ✅ | ✅ |
