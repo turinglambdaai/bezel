@@ -33,8 +33,6 @@
          "errors.rkt"
          "raw.rkt")
 
-;; (re-exported via errors.rkt users; exn:fail:bezel comes from errors)
-
 ;; kind is one of 'widget 'layout 'menu 'action 'object 'application;
 ;; the layout tree builder uses it to pick add-widget vs add-layout.
 (struct bezel-object (ptr kind [owned #:mutable]) #:transparent)

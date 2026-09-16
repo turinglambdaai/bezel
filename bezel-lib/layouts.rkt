@@ -29,7 +29,7 @@
          grid-put!
          form-row!)
 
-(require (only-in racket/match match)
+(require racket/match
          "private/errors.rkt"
          "private/objects.rkt"
          "private/raw.rkt")
