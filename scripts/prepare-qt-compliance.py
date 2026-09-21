@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Prepare the license/source material shipped with Bezel native runtimes.
+"""Prepare license/source material shipped with Bezel native runtimes.
 
-This script deliberately starts from the exact QtBase source archive recorded in
-release/qt-runtime-policy.json. It verifies the archive hash before extracting
-license and attribution material. Tagged releases also publish that exact source
-archive as a release asset, so LGPL corresponding source is under the
-redistributor's control rather than merely linked to an upstream website.
+The generator starts from the exact QtBase source archive recorded in
+release/qt-runtime-policy.json and verifies its SHA-256 before extracting any
+license or attribution material. Tagged releases publish the same verified
+source archive beside the binaries so corresponding source is controlled by the
+distributor rather than being represented only by an upstream link.
 """
 
 from __future__ import annotations
@@ -30,8 +30,12 @@ def sha256(path: Path) -> str:
 
 
 def download(url: str, destination: Path) -> None:
-    request = urllib.request.Request(url, headers={"User-Agent": "Bezel-release-compliance/1"})
-    with urllib.request.urlopen(request, timeout=120) as response, destination.open("wb") as out:
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "Bezel-release-compliance/1"}
+    )
+    with urllib.request.urlopen(request, timeout=120) as response, destination.open(
+        "wb"
+    ) as out:
         shutil.copyfileobj(response, out)
 
 
@@ -88,9 +92,9 @@ def generate_attributions(source_root: Path, qt_root: Path) -> tuple[int, int]:
             parts = entry.get("QtParts", ["libs"])
             if isinstance(parts, str):
                 parts = [parts]
-            # Bezel redistributes Qt runtime libraries/plugins, not examples,
-            # tests, or development tools. Keep all entries that can be part
-            # of a library; over-inclusion of notices is intentional.
+            # Bezel redistributes runtime libraries/plugins, not examples/tests.
+            # Over-inclusion is intentional: if an entry can be library content,
+            # retain its notice even if a particular platform build optimizes it out.
             if "libs" not in parts:
                 continue
             entries.append((str(entry.get("QDocModule", "qtbase")), relative, entry))
@@ -107,15 +111,15 @@ def generate_attributions(source_root: Path, qt_root: Path) -> tuple[int, int]:
                 candidate = (source_file.parent / reference).resolve()
                 try:
                     rel = candidate.relative_to(source_root.resolve())
-                except ValueError:
+                except ValueError as exc:
                     raise RuntimeError(
-                        f"third-party attribution references a file outside QtBase: "
+                        "third-party attribution references a file outside QtBase: "
                         f"{source_file}: {reference}"
-                    )
+                    ) from exc
                 copy_if_file(candidate, license_file_root / rel)
 
-    # Preserve nearby third-party license/notice files even when an attribution
-    # entry relies on legacy metadata instead of an explicit LicenseFile field.
+    # Preserve conventional third-party license/notice files even when legacy
+    # metadata does not explicitly name them.
     thirdparty = source_root / "src" / "3rdparty"
     if thirdparty.is_dir():
         for candidate in sorted(thirdparty.rglob("*")):
@@ -126,21 +130,26 @@ def generate_attributions(source_root: Path, qt_root: Path) -> tuple[int, int]:
                 rel = candidate.relative_to(source_root)
                 copy_if_file(candidate, license_file_root / rel)
 
-    entries.sort(key=lambda item: (item[0].lower(), str(item[2].get("Name", "")).lower()))
+    entries.sort(
+        key=lambda item: (item[0].lower(), str(item[2].get("Name", "")).lower())
+    )
     notice = qt_root / "QTBASE-THIRD-PARTY-NOTICES.md"
     with notice.open("w", encoding="utf-8", newline="\n") as out:
         out.write("# QtBase third-party notices\n\n")
         out.write(
             "Generated from the `qt_attribution.json` files in the exact QtBase "
-            "source archive shipped with this Bezel release. Entries that are "
-            "marked as runtime-library (`libs`) content are included. Extra "
-            "notices may be present; over-inclusion is intentional.\n\n"
+            "source archive shipped with this Bezel release. Entries marked as "
+            "runtime-library (`libs`) content are included. Extra notices may be "
+            "present; over-inclusion is intentional.\n\n"
         )
         for module, relative, entry in entries:
-            name = render_value(entry.get("Name")) or render_value(entry.get("Id")) or "Unnamed component"
+            name = (
+                render_value(entry.get("Name"))
+                or render_value(entry.get("Id"))
+                or "Unnamed component"
+            )
             version = render_value(entry.get("Version"))
-            heading = f"## {name}" + (f" — {version}" if version else "")
-            out.write(heading + "\n\n")
+            out.write(f"## {name}" + (f" — {version}" if version else "") + "\n\n")
             fields = [
                 ("Qt documentation module", module),
                 ("License", render_value(entry.get("License"))),
@@ -176,11 +185,11 @@ def main() -> None:
     expected_hash = policy["source_sha256"].lower()
 
     if policy.get("public_release_license_mode") != "lgpl":
-        raise RuntimeError("public release policy must remain fail-closed on the LGPL path")
+        raise RuntimeError("public release policy must remain fail-closed on LGPL")
     if policy.get("public_release_linkage") != "dynamic":
         raise RuntimeError("public Qt redistribution must use dynamic linking")
     if policy.get("public_workflow_may_publish_commercial_qt") is not False:
-        raise RuntimeError("public workflow must not claim commercial Qt redistribution")
+        raise RuntimeError("public workflow must not claim commercial Qt rights")
 
     shutil.rmtree(output_root, ignore_errors=True)
     runtime_licenses = output_root / "runtime-licenses"
@@ -205,7 +214,7 @@ def main() -> None:
         safe_extract(downloaded, extracted)
         source_root = extracted / f"qtbase-everywhere-src-{version}"
         if not source_root.is_dir():
-            candidates = [p for p in extracted.iterdir() if p.is_dir()]
+            candidates = [path for path in extracted.iterdir() if path.is_dir()]
             if len(candidates) != 1:
                 raise RuntimeError("could not identify QtBase source root after extraction")
             source_root = candidates[0]
@@ -225,7 +234,9 @@ def main() -> None:
         shutil.copy2(downloaded, source_output / archive_name)
 
     shutil.copy2(repo_root / "LICENSE", runtime_licenses / "BEZEL-MIT.txt")
-    shutil.copy2(repo_root / "docs" / "LGPL_RELINKING.md", runtime_licenses / "RELINKING.md")
+    shutil.copy2(
+        repo_root / "docs" / "LGPL_RELINKING.md", runtime_licenses / "RELINKING.md"
+    )
     shutil.copy2(policy_path, runtime_licenses / "QT-RUNTIME-POLICY.json")
 
     (qt_root / "QT-SOURCE.txt").write_text(
@@ -248,30 +259,31 @@ def main() -> None:
         newline="\n",
     )
 
-    (runtime_licenses / "NOTICE.md").write_text(
-        f"""# Bezel native runtime licensing notice\n\n"
-        f"Bezel's own source and shim are MIT licensed; see `BEZEL-MIT.txt`.\n\n"
+    notice_text = (
+        "# Bezel native runtime licensing notice\n\n"
+        "Bezel's own source and shim are MIT licensed; see `BEZEL-MIT.txt`.\n\n"
         f"This public prebuilt runtime contains dynamically linked QtBase {version} "
-        f"libraries/plugins and is prepared for redistribution using Qt's LGPL v3 "
-        f"open-source licensing path. The applicable Qt license texts are under "
-        f"`Qt/LICENSES/`, and generated third-party notices are in "
-        f"`Qt/QTBASE-THIRD-PARTY-NOTICES.md`.\n\n"
-        f"The Qt libraries are not statically linked into Bezel. The runtime layout "
-        f"is intentionally replaceable; see `RELINKING.md` for installation and "
-        f"replacement instructions. Bezel does not impose DRM or license terms that "
-        f"forbid reverse engineering for the purpose permitted by the LGPL.\n\n"
-        f"The exact verified QtBase source archive is published with each tagged "
-        f"Bezel LGPL release. See `Qt/QT-SOURCE.txt`.\n\n"
-        f"Linux operating-system libraries and the Windows Microsoft Visual C++ "
-        f"runtime are prerequisites, not redistributed inside Bezel's public runtime "
-        f"archives. This deliberately reduces unrelated third-party redistribution "
-        f"obligations.\n\n"
-        f"If you redistribute these binaries as part of another product, you are a "
-        f"redistributor too: preserve the required notices and user freedoms and make "
-        f"the corresponding source available under your control. Product-specific "
-        f"legal review is still appropriate.\n""",
-        encoding="utf-8",
-        newline="\n",
+        "libraries/plugins and is prepared for redistribution using Qt's LGPL v3 "
+        "open-source licensing path. The applicable Qt license texts are under "
+        "`Qt/LICENSES/`, and generated third-party notices are in "
+        "`Qt/QTBASE-THIRD-PARTY-NOTICES.md`.\n\n"
+        "The Qt libraries are not statically linked into Bezel. The runtime layout "
+        "is intentionally replaceable; see `RELINKING.md` for installation and "
+        "replacement instructions. Bezel does not impose DRM or license terms that "
+        "forbid reverse engineering for the purpose permitted by the LGPL.\n\n"
+        "The exact verified QtBase source archive is published with each tagged "
+        "Bezel LGPL release. See `Qt/QT-SOURCE.txt`.\n\n"
+        "Linux operating-system libraries and the Windows Microsoft Visual C++ "
+        "runtime are prerequisites, not redistributed inside Bezel's public runtime "
+        "archives. This deliberately reduces unrelated third-party redistribution "
+        "obligations.\n\n"
+        "If you redistribute these binaries as part of another product, you are a "
+        "redistributor too: preserve the required notices and user freedoms and make "
+        "the corresponding source available under your control. Product-specific "
+        "legal review is still appropriate.\n"
+    )
+    (runtime_licenses / "NOTICE.md").write_text(
+        notice_text, encoding="utf-8", newline="\n"
     )
 
     compliance_summary = {
