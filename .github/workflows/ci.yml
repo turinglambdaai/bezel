@@ -6,13 +6,40 @@ on:
   pull_request:
     branches: [main]
 
+# The project is public and CI only needs to read repository contents.
+permissions:
+  contents: read
+
+# A new commit supersedes older validation for the same branch/PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  generated:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Racket
+        uses: Bogdanp/setup-racket@v1.11
+        with:
+          version: '8.12'
+
+      - name: Regenerate checked-in bindings
+        run: racket tools/generator/generate.rkt tools/generator/specs/dial.json
+
+      - name: Verify generated bindings are reproducible
+        run: git diff --exit-code -- bezel-shim/src/generated bezel-lib/generated
+
   test:
     # Build the C++ shim against Qt 6 on all three platforms, then run
     # the Racket test suite against it headlessly (QT_QPA_PLATFORM=
     # offscreen): real Qt objects, real signal deliveries, real PNG
     # grabs — no display needed.
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -107,6 +134,7 @@ jobs:
 
   docs:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
