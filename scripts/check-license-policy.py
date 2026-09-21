@@ -11,7 +11,7 @@ import sys
 
 REQUIRED_QT_VERSION = "6.8.3"
 REQUIRED_QTBASE_SHA256 = "56001b905601bb9023d399f3ba780d7fa940f3e4861e496a7c490331f49e0b80"
-REQUIRED_LINUX_PROFILE = "source-shared-no-icu-force-bundled-libs"
+REQUIRED_LINUX_PROFILE = "source-shared-no-icu-host-deps-external"
 
 
 def fail(message: str) -> None:
@@ -48,8 +48,8 @@ def main() -> None:
         fail(f"Linux Qt build profile must remain {REQUIRED_LINUX_PROFILE}")
     if policy.get("linux_qt_icu_enabled") is not False:
         fail("public Linux Qt build must keep ICU disabled")
-    if policy.get("linux_qt_bundled_third_party") is not True:
-        fail("public Linux Qt build must use reviewed QtBase bundled third-party copies")
+    if policy.get("linux_non_qt_shared_libraries_are_host_prerequisites") is not True:
+        fail("Linux non-Qt shared libraries must remain external host prerequisites")
     if policy.get("bundle_linux_system_libraries") is not False:
         fail("public Linux package may not recursively redistribute host system libraries")
     if policy.get("bundle_windows_msvc_runtime") is not False:
@@ -79,9 +79,18 @@ def main() -> None:
     linux_builder = (repo / "scripts" / "build-pinned-qt-linux.sh").read_text(
         encoding="utf-8"
     )
-    for token in ("-shared", "-no-icu", "-force-bundled-libs"):
+    for token in ("-shared", "-no-icu"):
         if token not in linux_builder:
             fail(f"Linux Qt builder is missing required configure option: {token}")
+    if "-force-bundled-libs" in linux_builder:
+        fail("Linux Qt builder contains unsupported -force-bundled-libs option")
+
+    linux_packager = (repo / "scripts" / "package-native-linux.sh").read_text(
+        encoding="utf-8"
+    )
+    for token in ("SYSTEM-DEPENDENCIES.txt", "unexpected non-Qt shared library"):
+        if token not in linux_packager:
+            fail(f"Linux packager is missing host-dependency boundary control: {token}")
 
     for required_path in (
         repo / "docs" / "LGPL_RELINKING.md",
