@@ -6,11 +6,9 @@ on:
   pull_request:
     branches: [main]
 
-# The project is public and CI only needs to read repository contents.
 permissions:
   contents: read
 
-# A new commit supersedes older validation for the same branch/PR.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -34,10 +32,6 @@ jobs:
         run: git diff --exit-code -- bezel-shim/src/generated bezel-lib/generated
 
   test:
-    # Build the C++ shim against Qt 6 on all three platforms, then run
-    # the Racket test suite against it headlessly (QT_QPA_PLATFORM=
-    # offscreen): real Qt objects, real signal deliveries, real PNG
-    # grabs — no display needed.
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
@@ -53,9 +47,6 @@ jobs:
         uses: Bogdanp/setup-racket@v1.11
         with:
           version: ${{ matrix.racket-version }}
-          # macOS runners: brew Qt is arm64, so Racket must be too (the
-          # action defaults to x64, which runs under Rosetta and cannot
-          # dlopen the arm64 shim).
           architecture: ${{ runner.os == 'macOS' && 'arm64' || 'x64' }}
 
       - name: Install Qt6 (Linux)
@@ -103,8 +94,6 @@ jobs:
         run: |
           raco pkg install --auto --no-docs --link ./bezel-lib
           raco pkg install --auto --no-docs --link ./bezel-test
-          # The umbrella must stay installable: its deps resolve against
-          # the linked packages above. Install it once, last.
           raco pkg install --auto --no-docs --link ./bezel
 
       - name: Shim diagnostics (macOS)
@@ -131,6 +120,154 @@ jobs:
         with:
           name: showcase-${{ matrix.os }}
           path: docs/showcase.png
+
+  native-package:
+    name: Native package (${{ matrix.asset }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: bezel-native-linux-x86_64
+            archive: bezel-native-linux-x86_64.tar.gz
+          - os: windows-latest
+            asset: bezel-native-windows-x86_64
+            archive: bezel-native-windows-x86_64.zip
+          - os: macOS-latest
+            asset: bezel-native-macosx-aarch64
+            archive: bezel-native-macosx-aarch64.tar.gz
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt6 and packaging tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qt6-base-dev qt6-base-dev-tools libgl1-mesa-dev patchelf
+          echo "CMAKE_PREFIX_PATH=/usr" >> $GITHUB_ENV
+
+      - name: Install Qt6 and packaging tools (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install qt cmake
+          echo "CMAKE_PREFIX_PATH=$(brew --prefix qt)" >> $GITHUB_ENV
+          echo "$(brew --prefix qt)/bin" >> $GITHUB_PATH
+
+      - name: Install Qt6 (Windows)
+        if: runner.os == 'Windows'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.*'
+          archives: qtbase
+          cache: true
+
+      - name: Set up MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure shim (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: cmake -S bezel-shim -B bezel-shim/build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Configure shim (Windows)
+        if: runner.os == 'Windows'
+        run: cmake -S bezel-shim -B bezel-shim\build -DCMAKE_BUILD_TYPE=Release -G Ninja
+
+      - name: Build shim (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: cmake --build bezel-shim/build -j
+
+      - name: Build shim (Windows)
+        if: runner.os == 'Windows'
+        run: cmake --build bezel-shim\build --config Release -j
+
+      - name: Package Linux runtime
+        if: runner.os == 'Linux'
+        run: bash scripts/package-native-linux.sh bezel-shim/build dist
+
+      - name: Package macOS runtime
+        if: runner.os == 'macOS'
+        run: bash scripts/package-native-macos.sh bezel-shim/build dist
+
+      - name: Package Windows runtime
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/package-native-windows.ps1 -BuildDir bezel-shim/build -DistDir dist
+
+      - name: Upload native archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.archive }}
+          if-no-files-found: error
+
+  native-smoke:
+    name: Clean runtime smoke (${{ matrix.asset }})
+    needs: native-package
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: bezel-native-linux-x86_64
+            archive: bezel-native-linux-x86_64.tar.gz
+            racket-arch: x64
+          - os: windows-latest
+            asset: bezel-native-windows-x86_64
+            archive: bezel-native-windows-x86_64.zip
+            racket-arch: x64
+          - os: macOS-latest
+            asset: bezel-native-macosx-aarch64
+            archive: bezel-native-macosx-aarch64.tar.gz
+            racket-arch: arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Racket only
+        uses: Bogdanp/setup-racket@v1.11
+        with:
+          version: '8.12'
+          architecture: ${{ matrix.racket-arch }}
+
+      - name: Download native archive
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist
+
+      - name: Extract runtime (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p dist/unpacked
+          tar -xzf "dist/${{ matrix.archive }}" -C dist/unpacked
+
+      - name: Extract runtime (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Expand-Archive -Path "dist/${{ matrix.archive }}" -DestinationPath "dist/unpacked" -Force
+
+      - name: Link Racket packages
+        run: |
+          raco pkg install --auto --no-docs --link ./bezel-lib
+          raco pkg install --auto --no-docs --link ./bezel
+
+      - name: Diagnose packaged runtime
+        env:
+          BEZEL_NATIVE_DIR: ${{ github.workspace }}/dist/unpacked/${{ matrix.asset }}
+          QT_QPA_PLATFORM: offscreen
+        run: raco bezel doctor
+
+      - name: Run packaged runtime smoke test
+        env:
+          BEZEL_NATIVE_DIR: ${{ github.workspace }}/dist/unpacked/${{ matrix.asset }}
+          QT_QPA_PLATFORM: offscreen
+        run: racket scripts/native-smoke.rkt
 
   docs:
     runs-on: ubuntu-latest
