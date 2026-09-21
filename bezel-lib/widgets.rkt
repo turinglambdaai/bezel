@@ -3,8 +3,9 @@
 ;; Widgets: constructors and the shared widget API.
 ;;
 ;; Every constructor takes an optional parent. With a parent, Qt owns
-;; the object (see private/objects.rkt); without, a Racket finalizer
-;; deletes it when it becomes garbage.
+;; the object; without one, Bezel keeps it alive until explicit deletion
+;; or application teardown. There are deliberately no deleting GC
+;; finalizers (see private/objects.rkt).
 
 (provide make-window
          make-widget
@@ -56,9 +57,11 @@
 
 ;; Create + wrap a widget with the standard parent/ownership rule.
 ;; `build` receives the resolved parent pointer (or #f) and constructs
-;; the raw handle; a null parent means Racket tracks the object.
+;; the raw handle; a null parent means the object is top-level from Qt's
+;; ownership perspective.
 (define (spawn who build parent)
   (require-application)
+  (when parent (require-alive! who parent))
   (wrap-handle (ok-handle who (build (and parent (ptr-of parent))))
                'widget (not parent)))
 
@@ -179,13 +182,16 @@
   (require-alive! 'widget-set-value! w)
   (ok! 'widget-set-value! (bezel-widget-set-value (ptr-of w) value)))
 
+;; Several Qt getters legitimately return -1 (for example "no selection").
+;; The shim clears its thread-local error at every ABI entry, so -1 is an
+;; error only when that same call also produced a fresh error string.
+(define (value-or-error who r)
+  (when (and (= r -1) (last-error)) (raise-bezel-error who))
+  r)
+
 (define (widget-value w)
   (require-alive! 'widget-value w)
-  (define r (bezel-widget-value (ptr-of w)))
-  ;; -1 is a legitimate value for negative ranges; the shim clears its
-  ;; error slot at every call, so a fresh error is the real failure signal.
-  (when (and (= r -1) (last-error)) (raise-bezel-error 'widget-value))
-  r)
+  (value-or-error 'widget-value (bezel-widget-value (ptr-of w))))
 
 (define (set-widget-range! w min max)
   (require-alive! 'set-widget-range! w)
@@ -197,7 +203,7 @@
 
 (define (combo-current-index combo)
   (require-alive! 'combo-current-index combo)
-  (bezel-combo-current-index (ptr-of combo)))
+  (value-or-error 'combo-current-index (bezel-combo-current-index (ptr-of combo))))
 
 (define (combo-current-text combo)
   (require-alive! 'combo-current-text combo)
@@ -219,7 +225,7 @@
 
 (define (list-current-row lst)
   (require-alive! 'list-current-row lst)
-  (bezel-list-current-row (ptr-of lst)))
+  (value-or-error 'list-current-row (bezel-list-current-row (ptr-of lst))))
 
 (define (list-current-text lst)
   (require-alive! 'list-current-text lst)
@@ -242,11 +248,22 @@
 (define (widget-grab-png w)
   (require-alive! 'widget-grab-png w)
   (define len-p (malloc _int 'raw))
-  (ptr-set! len-p _int 0)
-  (define data (bezel-widget-grab-png (ptr-of w) len-p))
-  (unless data (raise-bezel-error 'widget-grab-png))
-  (define len (ptr-ref len-p _int))
-  (define bs (make-bytes len))
-  (memcpy bs data len)
-  (bezel-free data)
-  bs)
+  (define data #f)
+  (dynamic-wind
+    void
+    (lambda ()
+      (ptr-set! len-p _int 0)
+      (set! data (bezel-widget-grab-png (ptr-of w) len-p))
+      (unless data (raise-bezel-error 'widget-grab-png))
+      (define len (ptr-ref len-p _int))
+      (when (< len 0)
+        (raise
+         (exn:fail:bezel
+          "bezel: widget-grab-png: native shim returned a negative PNG size"
+          (current-continuation-marks))))
+      (define bs (make-bytes len))
+      (memcpy bs data len)
+      bs)
+    (lambda ()
+      (when data (bezel-free data))
+      (free len-p))))
