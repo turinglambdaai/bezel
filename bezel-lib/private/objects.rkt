@@ -10,8 +10,8 @@
 ;; There are deliberately NO deleting finalizers: a finalizer that
 ;; fires late can hit a heap address Qt has already freed and reused
 ;; for a different widget, destroying an innocent object (observed on
-;; Windows). `owned` records the parent rule at creation time for
-;; documentation; it no longer schedules deletion.
+;; Windows). `owned` records the current Qt parent rule for diagnostics
+;; and composition; it does not schedule GC-driven deletion.
 ;;
 ;; Handles may outlive their Qt object (user closed a window, parent
 ;; chain deleted it). Use `bezel-alive?` to check; calls on dead handles
@@ -48,9 +48,8 @@
   (= 1 (bezel-object-alive (ptr-of o))))
 
 ;; Refuse to operate on dead handles up front. bezel_object_alive does
-;; not set shim errors (finalizers call it on dead handles routinely),
-;; so the message here is built locally — "unknown error" would be
-;; misleading.
+;; not set shim errors, so the message here is built locally — "unknown
+;; error" would be misleading.
 (define (require-alive! who o)
   (unless (bezel-alive? o)
     (raise
@@ -58,13 +57,14 @@
       (format "bezel: ~a: the Qt object behind this handle has been destroyed" who)
       (current-continuation-marks)))))
 
-;; Explicit deletion: after this, the handle is dead.
+;; Explicit deletion: after this, the handle is dead once Qt processes
+;; the deferred delete event.
 (define (bezel-delete! o)
   (set-bezel-object-owned! o #f)
   (ok! 'bezel-delete! (bezel-object-delete (ptr-of o))))
 
 ;; Ownership transfer to Qt (used by layout!/set-layout after Qt
-;; reparents objects); finalizer stands down.
+;; reparents objects).
 (define (adopt-by-qt! o) (set-bezel-object-owned! o #f))
 
 ;; Named qt-object-name (not object-name) to avoid clashing with
@@ -81,9 +81,12 @@
 
 (define (object-set-parent! o parent)
   (require-alive! 'object-set-parent! o)
+  (when parent (require-alive! 'object-set-parent! parent))
   (ok! 'object-set-parent!
        (bezel-object-set-parent (ptr-of o) (and parent (ptr-of parent))))
-  (adopt-by-qt! o))
+  ;; A non-null parent transfers ownership to Qt. Unparenting makes the
+  ;; object top-level again, so keep the diagnostic ownership bit honest.
+  (set-bezel-object-owned! o (not parent)))
 
 ;; Copy a NUL-terminated UTF-8 C string.
 (define (cstring->string/utf8 p)
