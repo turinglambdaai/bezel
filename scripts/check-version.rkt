@@ -2,7 +2,8 @@
 
 (require racket/file
          racket/list
-         racket/path)
+         racket/path
+         racket/runtime-path)
 
 (define-runtime-path script-dir ".")
 (define root (simplify-path (build-path script-dir 'up) #f))
