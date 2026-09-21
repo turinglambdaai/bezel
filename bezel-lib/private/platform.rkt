@@ -62,8 +62,7 @@
     ;; macdeployqt layout: libbezel is in Contents/Frameworks while plugins are
     ;; in Contents/PlugIns.
     [else
-     (define contents-dir (and (path-only lib-dir) (path-only (path-only lib-dir))))
-     (define plugins-dir (and contents-dir (build-path contents-dir "PlugIns")))
-     (and plugins-dir
-          (directory-exists? (build-path plugins-dir "platforms"))
+     (define contents-dir (simplify-path (build-path lib-dir 'up) #f))
+     (define plugins-dir (build-path contents-dir "PlugIns"))
+     (and (directory-exists? (build-path plugins-dir "platforms"))
           plugins-dir)]))
