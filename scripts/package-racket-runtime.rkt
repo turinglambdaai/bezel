@@ -23,7 +23,6 @@
 (define-runtime-path script-dir ".")
 (define repo-root (simplify-path (build-path script-dir 'up) #f))
 (define source-package (build-path repo-root "bezel-lib"))
-(define version (dynamic-require (build-path source-package "info.rkt") 'version))
 
 (make-directory* output-dir)
 
@@ -56,9 +55,12 @@
             "raco pkg create did not produce expected archive: ~a"
             (path->string created)))
 
+   ;; The GitHub release tag already carries the semantic version, so keep the
+   ;; asset name stable across versions. That lets CI and install instructions
+   ;; stay data-driven instead of duplicating the version in workflow YAML.
    (define final
      (build-path output-dir
-                 (format "bezel-lib-~a-~a.zip" version platform-key)))
+                 (format "bezel-lib-~a.zip" platform-key)))
    (when (file-exists? final) (delete-file final))
    (rename-file-or-directory created final)
 
