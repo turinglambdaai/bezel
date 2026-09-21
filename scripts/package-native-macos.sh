@@ -41,7 +41,7 @@ fi
 
 FRAMEWORKS="$APP/Contents/Frameworks"
 PLUGINS="$APP/Contents/PlugIns"
-mkdir -p "$FRAMEWORKS"
+mkdir -p "$FRAMEWORKS" "$PLUGINS/platforms"
 
 SHIM="$(find "$FRAMEWORKS" -maxdepth 1 -type f -name 'libbezel*.dylib' -print -quit)"
 if [[ -z "$SHIM" ]]; then
@@ -61,7 +61,22 @@ if [[ ! -e "$FRAMEWORKS/libbezel.0.dylib" ]]; then
   cp -L "$SHIM" "$FRAMEWORKS/libbezel.0.dylib"
 fi
 
+# macdeployqt normally deploys Cocoa only. Keep the offscreen QPA backend too
+# so packaged Bezel works in CI, render farms, and screenshot automation.
+QT_PLUGIN_DIR=""
+if command -v qtpaths6 >/dev/null 2>&1; then
+  QT_PLUGIN_DIR="$(qtpaths6 --plugin-dir)"
+elif command -v qtpaths >/dev/null 2>&1; then
+  QT_PLUGIN_DIR="$(qtpaths --plugin-dir)"
+elif command -v brew >/dev/null 2>&1; then
+  QT_PLUGIN_DIR="$(brew --prefix qt)/share/qt/plugins"
+fi
+if [[ -n "$QT_PLUGIN_DIR" && -e "$QT_PLUGIN_DIR/platforms/libqoffscreen.dylib" ]]; then
+  cp -L "$QT_PLUGIN_DIR/platforms/libqoffscreen.dylib" "$PLUGINS/platforms/"
+fi
+
 [[ -d "$PLUGINS/platforms" ]] || { echo "Qt platform plugins missing from app bundle" >&2; exit 1; }
+[[ -e "$PLUGINS/platforms/libqoffscreen.dylib" ]] || { echo "offscreen platform plugin missing from app bundle" >&2; exit 1; }
 [[ -e "$FRAMEWORKS/libbezel.0.dylib" ]] || { echo "libbezel missing from app bundle" >&2; exit 1; }
 
 mkdir -p "$DIST_DIR"
