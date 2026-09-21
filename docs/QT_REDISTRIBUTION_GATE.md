@@ -6,10 +6,11 @@ Bezel's public CI can build portable runtime bundles containing Qt shared librar
 
 The public GitHub Actions release path is intentionally narrow and auditable:
 
-- Qt is pinned to **QtBase 6.8.3**.
+- Qt is pinned to the public **QtBase 6.8.4** source plus reviewed official Qt 6.8 security patches through **2026-09-17**.
 - Bezel and Qt are dynamically linked.
 - Public prebuilt binaries use the **LGPLv3** path only.
-- The exact QtBase source archive is downloaded from `download.qt.io`, verified against the reviewed SHA-256 recorded in `release/qt-runtime-policy.json`, and published as a release asset beside the binaries.
+- Every target is rebuilt from the same exact public source-and-patch set; public online Qt binaries are not release inputs.
+- The exact QtBase base source and applied patches are downloaded from `download.qt.io`, verified against reviewed SHA-256 values in `release/qt-runtime-policy.json`, and published as release assets beside the binaries.
 - License texts, Bezel's MIT license, third-party attribution metadata/notices, source metadata, and relinking instructions are embedded in every native runtime package.
 - Linux host/system libraries are not recursively copied into the public Bezel bundle.
 - The Microsoft Visual C++ runtime is not copied into the public Windows bundle; it remains a target-machine prerequisite.
@@ -23,13 +24,13 @@ Before creating a production tag, configure:
 - `BEZEL_QT_LICENSE_MODE=lgpl`
 - `BEZEL_QT_REDISTRIBUTION_ACK=approved-lgpl-v3`
 
-No external source-offer URL is accepted as a substitute for the tagged release's source asset. The release itself publishes the exact verified `qtbase-everywhere-src-6.8.3.tar.xz` used as the compliance source reference.
+No external source-offer URL is accepted as a substitute for the tagged release's source assets. The release itself publishes `qtbase-everywhere-opensource-src-6.8.4.tar.xz`, the applied-patch bundle, and `QT-SOURCE-MANIFEST.json`.
 
 Manual workflow-dispatch runs may build and smoke-test artifacts but do not publish a GitHub Release.
 
 ## Automated blockers
 
-The repository contains `release/qt-runtime-policy.json` and `scripts/check-license-policy.py`. CI fails when the public workflow drifts from the pinned version/hash, switches away from dynamic LGPL distribution, re-enables public commercial-Qt publication, reintroduces wildcard Qt versions, or re-enables bundled Linux system/MSVC runtime libraries.
+The repository contains `release/qt-runtime-policy.json` and `scripts/check-license-policy.py`. CI fails when the public workflow drifts from the pinned source/patch hashes, switches away from dynamic LGPL distribution, uses prebuilt Qt for a release runtime, re-enables public commercial-Qt publication, reintroduces wildcard Qt versions, or re-enables bundled Linux system/MSVC runtime libraries. The checker also compares the reviewed inventory with Qt's live official 6.8 `qtbase` patch index and fails on any new, removed, or unreviewed patch.
 
 The native packagers also reject unexpected non-Qt runtime libraries in the public package and `scripts/verify-release-layout.rkt` rejects packages missing mandatory licensing/relinking material.
 
@@ -43,9 +44,9 @@ Application stores, DRM/signing designs, locked devices, contractual terms, or o
 
 A tagged public release includes:
 
-- `QT-REDISTRIBUTION.txt` recording Qt version, LGPL mode, dynamic linkage, source asset name, and source SHA-256;
-- the exact QtBase source archive;
-- `SHA256SUMS` covering native runtimes, self-contained packages, and the source archive;
+- `QT-REDISTRIBUTION.txt` recording Qt version, LGPL mode, dynamic linkage, source/patch assets, and the security review date;
+- the exact QtBase base source, applied-patch bundle, and source manifest;
+- `SHA256SUMS` covering native runtimes, self-contained packages, base source, patch bundle, and source manifest;
 - embedded `LICENSES/` material inside every runtime archive/package.
 
 This is an engineering compliance control and audit trail, not a substitute for product-specific legal review.

@@ -1,14 +1,75 @@
 {
-  "schema_version": 2,
-  "qt_version": "6.8.3",
+  "schema_version": 3,
+  "qt_version": "6.8.4",
   "qt_module": "qtbase",
-  "source_archive": "qtbase-everywhere-src-6.8.3.tar.xz",
-  "source_url": "https://download.qt.io/official_releases/qt/6.8/6.8.3/submodules/qtbase-everywhere-src-6.8.3.tar.xz",
-  "source_sha256": "56001b905601bb9023d399f3ba780d7fa940f3e4861e496a7c490331f49e0b80",
+  "source_archive": "qtbase-everywhere-opensource-src-6.8.4.tar.xz",
+  "source_url": "https://download.qt.io/official_releases/qt/6.8/6.8.4/submodules/qtbase-everywhere-opensource-src-6.8.4.tar.xz",
+  "source_sha256": "532dfbf3fa3cbc68fa37441ea9e81c5009da044eaecda78ffaeafd8bd125532f",
+  "security_patch_index_url": "https://download.qt.io/official_releases/qt/6.8/",
+  "security_reviewed_through": "2026-09-17",
+  "security_patch_inventory": [
+    {
+      "cve": "CVE-2025-14575",
+      "file": "CVE-2025-14575-qtbase-6.8.diff",
+      "status": "included-in-6.8.4"
+    },
+    {
+      "cve": "CVE-2025-3512",
+      "file": "CVE-2025-3512-qtbase-6.8.diff",
+      "status": "included-in-6.8.4"
+    },
+    {
+      "cve": "CVE-2025-4211",
+      "file": "CVE-2025-4211-qtbase-6.8.diff",
+      "status": "included-in-6.8.4"
+    },
+    {
+      "cve": "CVE-2025-5455",
+      "file": "CVE-2025-5455-qtbase-6.8.patch",
+      "status": "included-in-6.8.4"
+    },
+    {
+      "cve": "CVE-2025-5992",
+      "file": "CVE-2025-5992-qtbase-6.8.patch",
+      "status": "included-in-6.8.4"
+    },
+    {
+      "cve": "CVE-2025-6338",
+      "file": "CVE-2025-6338-qtbase-6.8.patch",
+      "status": "included-in-6.8.4"
+    },
+    {
+      "cve": "CVE-2026-11573",
+      "file": "CVE-2026-11573-qtbase-6.8.diff",
+      "status": "included-in-6.8.4"
+    },
+    {
+      "cve": "CVE-2026-19248",
+      "file": "CVE-2026-19248-qtbase-6.8.diff",
+      "url": "https://download.qt.io/official_releases/qt/6.8/CVE-2026-19248-qtbase-6.8.diff",
+      "sha256": "86c063884e0a274075f29d1aa452001cef7d7dfcee21b21eb9a7165679b4052a",
+      "status": "applied"
+    },
+    {
+      "cve": "CVE-2026-76151",
+      "file": "CVE-2026-76151-qtbase-6.8.diff",
+      "url": "https://download.qt.io/official_releases/qt/6.8/CVE-2026-76151-qtbase-6.8.diff",
+      "sha256": "19683125f596b5278ff38461951ab778b1cc24a59065cc0721ff1a52e625f0c8",
+      "status": "applied"
+    },
+    {
+      "cve": "CVE-2026-78253",
+      "file": "CVE-2026-78253-qtbase-6.8.diff",
+      "url": "https://download.qt.io/official_releases/qt/6.8/CVE-2026-78253-qtbase-6.8.diff",
+      "sha256": "8a4f44fa40d4b46d0d2582652d84598f2ac55fcd4a53ecebc23ae5e381a3252a",
+      "status": "applied"
+    }
+  ],
   "public_release_license_mode": "lgpl",
   "public_release_linkage": "dynamic",
   "public_workflow_may_publish_commercial_qt": false,
-  "linux_qt_build_profile": "source-shared-no-icu-host-deps-external",
+  "public_qt_build_profile": "source-shared-no-icu-official-security-patches",
+  "linux_qt_build_profile": "source-shared-no-icu-host-deps-external-official-security-patches",
   "linux_qt_icu_enabled": false,
   "linux_non_qt_shared_libraries_are_host_prerequisites": true,
   "bundle_linux_system_libraries": false,

@@ -7,7 +7,7 @@ This document describes the Bezel SDK layout. It does not replace the LGPL text 
 ## General procedure
 
 1. Copy the Bezel native runtime directory to a location you can modify.
-2. Build or obtain a compatible QtBase build for the same operating system, CPU architecture, Qt major/minor ABI, and toolchain ABI required by the target.
+2. Build or obtain a compatible QtBase build for the same operating system, CPU architecture, Qt major/minor ABI, and toolchain ABI required by the target. The official Bezel build starts from the published QtBase 6.8.4 archive and applies the release's published patch bundle in manifest order with `scripts/prepare-pinned-qt-source.py`.
 3. Replace the Qt shared libraries/frameworks and any matching Qt plugins in that copied runtime. Keep the expected Qt library names and plugin directory layout.
 4. Point Bezel at the copied runtime with `BEZEL_NATIVE_DIR`, or install a rebuilt `bezel-lib` package containing that runtime.
 5. Run `raco bezel doctor` and the application's own tests before normal use.

@@ -11,9 +11,10 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 POLICY="$REPO_ROOT/release/qt-runtime-policy.json"
-PREFIX="${1:-$REPO_ROOT/.qt-linux/6.8.3}"
+PREFIX="${1:-$REPO_ROOT/.qt-linux/6.8.4}"
 WORK_DIR="${2:-$REPO_ROOT/.qt-linux-build}"
 SOURCE_ARCHIVE="${3:-}"
+PATCH_DIR="${4:-$REPO_ROOT/dist/compliance/source/patches}"
 
 read_policy() {
   python3 - "$POLICY" "$1" <<'PY'
@@ -30,7 +31,7 @@ QT_SOURCE_URL="$(read_policy source_url)"
 QT_SOURCE_SHA256="$(read_policy source_sha256)"
 
 case "$QT_VERSION" in
-  6.8.3) ;;
+  6.8.4) ;;
   *) echo "unexpected Qt version in policy: $QT_VERSION" >&2; exit 1 ;;
 esac
 
@@ -51,11 +52,12 @@ fi
 
 echo "$QT_SOURCE_SHA256  $SOURCE_ARCHIVE" | sha256sum --check -
 
-SRC_DIR="$WORK_DIR/src"
+SOURCE_STAGE="$WORK_DIR/source"
 BUILD_DIR="$WORK_DIR/build"
-rm -rf "$SRC_DIR" "$BUILD_DIR" "$PREFIX"
-mkdir -p "$SRC_DIR" "$BUILD_DIR" "$PREFIX"
-tar -xJf "$SOURCE_ARCHIVE" -C "$SRC_DIR" --strip-components=1
+rm -rf "$SOURCE_STAGE" "$BUILD_DIR" "$PREFIX"
+mkdir -p "$BUILD_DIR" "$PREFIX"
+SRC_DIR="$(python3 "$REPO_ROOT/scripts/prepare-pinned-qt-source.py" \
+  "$SOURCE_ARCHIVE" "$PATCH_DIR" "$SOURCE_STAGE")"
 
 # Deliberately small release configuration:
 # - shared: preserves the LGPL replacement/relinking model;
@@ -76,6 +78,10 @@ cd "$BUILD_DIR"
   -shared \
   -no-icu \
   -openssl-runtime \
+  -qt-zlib \
+  -qt-libpng \
+  -qt-libjpeg \
+  -qt-pcre \
   -nomake examples \
   -nomake tests \
   -- \
@@ -112,7 +118,9 @@ cat > "$PREFIX/BEZEL-QT-BUILD.txt" <<EOF
 Qt version: $QT_VERSION
 Source archive: $QT_ARCHIVE
 Source SHA-256: $QT_SOURCE_SHA256
-Build profile: linux-x86_64-source-shared-no-icu-host-deps-external
+Security review date: $(read_policy security_reviewed_through)
+Security patch record: BEZEL-QT-SOURCE.json in the prepared source tree
+Build profile: linux-x86_64-source-shared-no-icu-host-deps-external-official-security-patches
 Linkage: shared
 ICU: disabled
 Host dependency policy: dynamically linked non-Qt Linux libraries are prerequisites and are not redistributed by Bezel

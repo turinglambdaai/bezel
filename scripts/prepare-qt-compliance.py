@@ -3,9 +3,10 @@
 
 The generator starts from the exact QtBase source archive recorded in
 release/qt-runtime-policy.json and verifies its SHA-256 before extracting any
-license or attribution material. Tagged releases publish the same verified
-source archive beside the binaries so corresponding source is controlled by the
-distributor rather than being represented only by an upstream link.
+license or attribution material. It also downloads and verifies every official
+Qt 6.8 security patch applied by the public build. Tagged releases publish the
+base archive plus the patch bundle beside the binaries so corresponding source
+is controlled by the distributor rather than represented only by upstream links.
 """
 
 from __future__ import annotations
@@ -187,6 +188,11 @@ def main() -> None:
     archive_name = policy["source_archive"]
     source_url = policy["source_url"]
     expected_hash = policy["source_sha256"].lower()
+    applied_patches = [
+        entry
+        for entry in policy["security_patch_inventory"]
+        if entry["status"] == "applied"
+    ]
 
     if policy.get("public_release_license_mode") != "lgpl":
         raise RuntimeError("public release policy must remain fail-closed on LGPL")
@@ -199,8 +205,9 @@ def main() -> None:
     runtime_licenses = output_root / "runtime-licenses"
     qt_root = runtime_licenses / "Qt"
     source_output = output_root / "source"
+    patch_output = source_output / "patches"
     runtime_licenses.mkdir(parents=True, exist_ok=True)
-    source_output.mkdir(parents=True, exist_ok=True)
+    patch_output.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory(prefix="bezel-qt-compliance-") as tmp:
         tmp_path = Path(tmp)
@@ -216,7 +223,7 @@ def main() -> None:
         extracted = tmp_path / "src"
         extracted.mkdir()
         safe_extract(downloaded, extracted)
-        source_root = extracted / f"qtbase-everywhere-src-{version}"
+        source_root = extracted / f"qtbase-everywhere-opensource-src-{version}"
         if not source_root.is_dir():
             candidates = [path for path in extracted.iterdir() if path.is_dir()]
             if len(candidates) != 1:
@@ -237,6 +244,45 @@ def main() -> None:
 
         shutil.copy2(downloaded, source_output / archive_name)
 
+        patch_manifest = {
+            "qt_version": version,
+            "base_source_archive": archive_name,
+            "base_source_sha256": expected_hash,
+            "security_reviewed_through": policy["security_reviewed_through"],
+            "patches": [],
+        }
+        for entry in applied_patches:
+            patch = tmp_path / entry["file"]
+            print(f"Downloading official Qt security patch: {entry['url']}")
+            download(entry["url"], patch)
+            patch_hash = sha256(patch)
+            if patch_hash.lower() != entry["sha256"].lower():
+                raise RuntimeError(
+                    f"Qt security patch SHA-256 mismatch for {entry['file']}: "
+                    f"expected {entry['sha256']}, got {patch_hash}"
+                )
+            shutil.copy2(patch, patch_output / entry["file"])
+            patch_manifest["patches"].append(
+                {
+                    "cve": entry["cve"],
+                    "file": entry["file"],
+                    "url": entry["url"],
+                    "sha256": patch_hash,
+                }
+            )
+
+        manifest_path = source_output / "QT-SOURCE-MANIFEST.json"
+        manifest_path.write_text(
+            json.dumps(patch_manifest, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        with tarfile.open(
+            source_output / f"qtbase-{version}-security-patches.tar.gz", "w:gz"
+        ) as bundle:
+            bundle.add(manifest_path, arcname=manifest_path.name)
+            bundle.add(patch_output, arcname="patches")
+
     shutil.copy2(repo_root / "LICENSE", runtime_licenses / "BEZEL-MIT.txt")
     shutil.copy2(
         repo_root / "docs" / "LGPL_RELINKING.md", runtime_licenses / "RELINKING.md"
@@ -252,8 +298,12 @@ def main() -> None:
                 f"Source URL used by the release builder: {source_url}",
                 f"SHA-256: {expected_hash}",
                 "",
-                "Tagged Bezel LGPL releases publish this exact verified source archive",
-                "as a GitHub Release asset alongside the binary runtime packages.",
+                f"Security reviewed through: {policy['security_reviewed_through']}",
+                "",
+                "Tagged Bezel LGPL releases publish this exact verified base source",
+                "archive plus the verified official security-patch bundle alongside",
+                "the binary runtime packages. Apply the patches in manifest order",
+                "with scripts/prepare-pinned-qt-source.py from the tagged Bezel source.",
                 "Downstream redistributors must satisfy their own source-availability",
                 "and notice obligations under their own control.",
                 "",
@@ -275,8 +325,8 @@ def main() -> None:
         "is intentionally replaceable; see `RELINKING.md` for installation and "
         "replacement instructions. Bezel does not impose DRM or license terms that "
         "forbid reverse engineering for the purpose permitted by the LGPL.\n\n"
-        "The exact verified QtBase source archive is published with each tagged "
-        "Bezel LGPL release. See `Qt/QT-SOURCE.txt`.\n\n"
+        "The exact verified QtBase base source and applied official security patches "
+        "are published with each tagged Bezel LGPL release. See `Qt/QT-SOURCE.txt`.\n\n"
         "Linux operating-system libraries and the Windows Microsoft Visual C++ "
         "runtime are prerequisites, not redistributed inside Bezel's public runtime "
         "archives. This deliberately reduces unrelated third-party redistribution "
@@ -291,10 +341,12 @@ def main() -> None:
     )
 
     compliance_summary = {
-        "schema_version": 1,
+        "schema_version": 2,
         "qt_version": version,
         "qt_source_archive": archive_name,
         "qt_source_sha256": expected_hash,
+        "security_reviewed_through": policy["security_reviewed_through"],
+        "applied_security_patches": [entry["cve"] for entry in applied_patches],
         "linkage": "dynamic",
         "public_release_license_mode": "lgpl",
         "attribution_files_scanned": attribution_files,

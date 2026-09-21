@@ -42,7 +42,9 @@ $deploy = (Get-Command windeployqt.exe -ErrorAction Stop).Source
 # Public Bezel binaries intentionally redistribute Bezel + Qt only. Compiler
 # runtimes and optional Microsoft graphics fallback DLLs are host prerequisites,
 # avoiding accidental third-party redistribution under unrelated license terms.
-& $deploy --release --no-translations --no-compiler-runtime --no-system-d3d-compiler --no-opengl-sw --dir $root $probe
+& $deploy --release --no-translations --no-compiler-runtime `
+  --no-system-d3d-compiler --no-system-dxc-compiler --no-opengl-sw `
+  --dir $root $probe
 if ($LASTEXITCODE -ne 0) { throw "windeployqt failed with exit code $LASTEXITCODE" }
 
 Copy-Item $shim (Join-Path $root "bezel.dll") -Force
@@ -94,7 +96,8 @@ foreach ($required in @(
 # another unrelated top-level runtime into a public archive.
 $forbidden = @(
   "MSVCP140.dll", "MSVCP140_1.dll", "VCRUNTIME140.dll", "VCRUNTIME140_1.dll",
-  "concrt140.dll", "D3Dcompiler_47.dll", "opengl32sw.dll"
+  "concrt140.dll", "D3Dcompiler_47.dll", "dxcompiler.dll", "dxil.dll",
+  "opengl32sw.dll"
 )
 foreach ($name in $forbidden) {
   if (Test-Path (Join-Path $root $name)) {

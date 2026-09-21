@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  BEZEL_QT_VERSION: '6.8.3'
+  BEZEL_QT_VERSION: '6.8.4'
 
 permissions:
   contents: read
@@ -70,7 +70,7 @@ jobs:
     name: Build verified license/source bundle
     needs: [metadata, redistribution-policy]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -79,7 +79,10 @@ jobs:
 
       - name: Verify pinned source archive digest
         run: |
-          echo "56001b905601bb9023d399f3ba780d7fa940f3e4861e496a7c490331f49e0b80  dist/compliance/source/qtbase-everywhere-src-6.8.3.tar.xz" | sha256sum --check -
+          echo "532dfbf3fa3cbc68fa37441ea9e81c5009da044eaecda78ffaeafd8bd125532f  dist/compliance/source/qtbase-everywhere-opensource-src-6.8.4.tar.xz" | sha256sum --check -
+          echo "86c063884e0a274075f29d1aa452001cef7d7dfcee21b21eb9a7165679b4052a  dist/compliance/source/patches/CVE-2026-19248-qtbase-6.8.diff" | sha256sum --check -
+          echo "19683125f596b5278ff38461951ab778b1cc24a59065cc0721ff1a52e625f0c8  dist/compliance/source/patches/CVE-2026-76151-qtbase-6.8.diff" | sha256sum --check -
+          echo "8a4f44fa40d4b46d0d2582652d84598f2ac55fcd4a53ecebc23ae5e381a3252a  dist/compliance/source/patches/CVE-2026-78253-qtbase-6.8.diff" | sha256sum --check -
 
       - name: Upload compliance inputs
         uses: actions/upload-artifact@v4
@@ -92,7 +95,7 @@ jobs:
     name: Build release package (${{ matrix.platform }})
     needs: [metadata, redistribution-policy, compliance]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -107,7 +110,7 @@ jobs:
             archive: bezel-native-windows-x86_64.zip
             platform: windows-x86_64
             racket-arch: x64
-          - os: macOS-latest
+          - os: macos-15
             asset: bezel-native-macosx-aarch64
             archive: bezel-native-macosx-aarch64.tar.gz
             platform: macosx-aarch64
@@ -128,6 +131,11 @@ jobs:
           version: '8.12'
           architecture: ${{ matrix.racket-arch }}
 
+      - name: Set up Python for verified source preparation
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
       - name: Install Linux source-build prerequisites
         if: runner.os == 'Linux'
         run: |
@@ -147,33 +155,65 @@ jobs:
         if: runner.os == 'Linux'
         uses: actions/cache@v4
         with:
-          path: .qt-linux/6.8.3
-          key: bezel-qt-linux-6.8.3-noicu-bundled-56001b905601bb90-v1
+          path: .qt-linux/6.8.4
+          key: bezel-qt-linux-6.8.4-noicu-sec-532dfbf3-86c06388-19683125-8a4f44fa-v1
 
       - name: Build exact QtBase source (Linux)
         if: runner.os == 'Linux'
-        run: bash scripts/build-pinned-qt-linux.sh "$GITHUB_WORKSPACE/.qt-linux/6.8.3" "$GITHUB_WORKSPACE/.qt-linux-build" "$GITHUB_WORKSPACE/dist/compliance/source/qtbase-everywhere-src-6.8.3.tar.xz"
+        run: bash scripts/build-pinned-qt-linux.sh "$GITHUB_WORKSPACE/.qt-linux/6.8.4" "$GITHUB_WORKSPACE/.qt-linux-build" "$GITHUB_WORKSPACE/dist/compliance/source/qtbase-everywhere-opensource-src-6.8.4.tar.xz" "$GITHUB_WORKSPACE/dist/compliance/source/patches"
 
       - name: Export pinned Linux Qt
         if: runner.os == 'Linux'
         run: |
-          echo "$GITHUB_WORKSPACE/.qt-linux/6.8.3/bin" >> "$GITHUB_PATH"
-          echo "CMAKE_PREFIX_PATH=$GITHUB_WORKSPACE/.qt-linux/6.8.3" >> "$GITHUB_ENV"
-          echo "QT_ROOT_DIR=$GITHUB_WORKSPACE/.qt-linux/6.8.3" >> "$GITHUB_ENV"
-          echo "QT_PLUGIN_PATH=$GITHUB_WORKSPACE/.qt-linux/6.8.3/plugins" >> "$GITHUB_ENV"
-          echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/.qt-linux/6.8.3/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+          echo "$GITHUB_WORKSPACE/.qt-linux/6.8.4/bin" >> "$GITHUB_PATH"
+          echo "CMAKE_PREFIX_PATH=$GITHUB_WORKSPACE/.qt-linux/6.8.4" >> "$GITHUB_ENV"
+          echo "QT_ROOT_DIR=$GITHUB_WORKSPACE/.qt-linux/6.8.4" >> "$GITHUB_ENV"
+          echo "QT_PLUGIN_PATH=$GITHUB_WORKSPACE/.qt-linux/6.8.4/plugins" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/.qt-linux/6.8.4/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
 
-      - name: Install exact QtBase (Windows/macOS)
-        if: runner.os != 'Linux'
-        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
+      - name: Restore pinned Windows Qt build cache
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
         with:
-          version: ${{ env.BEZEL_QT_VERSION }}
-          archives: qtbase
-          cache: true
+          path: .qt-windows/6.8.4
+          key: bezel-qt-windows-6.8.4-noicu-sec-532dfbf3-86c06388-19683125-8a4f44fa-v1
+
+      - name: Restore pinned macOS Qt build cache
+        if: runner.os == 'macOS'
+        uses: actions/cache@v4
+        with:
+          path: .qt-macos/6.8.4
+          key: bezel-qt-macos-6.8.4-noicu-noopengl-sec-532dfbf3-86c06388-19683125-8a4f44fa-v1
 
       - name: Set up MSVC (Windows)
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build exact patched QtBase source (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/build-pinned-qt-windows.ps1 -Prefix .qt-windows/6.8.4 -SourceArchive dist/compliance/source/qtbase-everywhere-opensource-src-6.8.4.tar.xz -PatchDir dist/compliance/source/patches
+
+      - name: Export pinned Windows Qt
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "$env:GITHUB_WORKSPACE\.qt-windows\6.8.4\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "CMAKE_PREFIX_PATH=$env:GITHUB_WORKSPACE\.qt-windows\6.8.4" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "QT_ROOT_DIR=$env:GITHUB_WORKSPACE\.qt-windows\6.8.4" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "QT_PLUGIN_PATH=$env:GITHUB_WORKSPACE\.qt-windows\6.8.4\plugins" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build exact patched QtBase source (macOS)
+        if: runner.os == 'macOS'
+        run: bash scripts/build-pinned-qt-macos.sh "$GITHUB_WORKSPACE/.qt-macos/6.8.4" "$GITHUB_WORKSPACE/.qt-macos-build" "$GITHUB_WORKSPACE/dist/compliance/source/qtbase-everywhere-opensource-src-6.8.4.tar.xz" "$GITHUB_WORKSPACE/dist/compliance/source/patches"
+
+      - name: Export pinned macOS Qt
+        if: runner.os == 'macOS'
+        run: |
+          echo "$GITHUB_WORKSPACE/.qt-macos/6.8.4/bin" >> "$GITHUB_PATH"
+          echo "CMAKE_PREFIX_PATH=$GITHUB_WORKSPACE/.qt-macos/6.8.4" >> "$GITHUB_ENV"
+          echo "QT_ROOT_DIR=$GITHUB_WORKSPACE/.qt-macos/6.8.4" >> "$GITHUB_ENV"
+          echo "QT_PLUGIN_PATH=$GITHUB_WORKSPACE/.qt-macos/6.8.4/plugins" >> "$GITHUB_ENV"
 
       - name: Configure shim (Linux/macOS)
         if: runner.os != 'Windows'
@@ -241,7 +281,7 @@ jobs:
             asset: bezel-native-windows-x86_64
             platform: windows-x86_64
             racket-arch: x64
-          - os: macOS-latest
+          - os: macos-15
             target: macosx-aarch64
             asset: bezel-native-macosx-aarch64
             platform: macosx-aarch64
@@ -303,13 +343,16 @@ jobs:
           path: dist/compliance
 
       - name: Stage verified QtBase source
-        run: cp dist/compliance/source/qtbase-everywhere-src-6.8.3.tar.xz dist/
+        run: |
+          cp dist/compliance/source/qtbase-everywhere-opensource-src-6.8.4.tar.xz dist/
+          cp dist/compliance/source/qtbase-6.8.4-security-patches.tar.gz dist/
+          cp dist/compliance/source/QT-SOURCE-MANIFEST.json dist/
 
       - name: Generate SHA-256 checksums
         run: |
           cd dist
-          sha256sum bezel-native-* bezel-lib-*.zip qtbase-everywhere-src-6.8.3.tar.xz > SHA256SUMS
-          grep 'qtbase-everywhere-src-6.8.3.tar.xz' SHA256SUMS | grep '^56001b905601bb9023d399f3ba780d7fa940f3e4861e496a7c490331f49e0b80 ' >/dev/null
+          sha256sum bezel-native-* bezel-lib-*.zip qtbase-everywhere-opensource-src-6.8.4.tar.xz qtbase-6.8.4-security-patches.tar.gz QT-SOURCE-MANIFEST.json > SHA256SUMS
+          grep 'qtbase-everywhere-opensource-src-6.8.4.tar.xz' SHA256SUMS | grep '^532dfbf3fa3cbc68fa37441ea9e81c5009da044eaecda78ffaeafd8bd125532f ' >/dev/null
           cat SHA256SUMS
 
       - name: Record redistribution mode
@@ -319,9 +362,11 @@ jobs:
             echo "Qt redistribution mode: LGPLv3"
             echo "Qt version: $BEZEL_QT_VERSION"
             echo "Linkage: dynamic"
-            echo "Linux Qt build: exact source, shared, ICU disabled, bundled QtBase third-party libraries"
-            echo "QtBase source asset: qtbase-everywhere-src-6.8.3.tar.xz"
-            echo "QtBase source SHA-256: 56001b905601bb9023d399f3ba780d7fa940f3e4861e496a7c490331f49e0b80"
+            echo "Qt build: exact public source on every platform, shared, ICU disabled, official reviewed security patches applied"
+            echo "QtBase source asset: qtbase-everywhere-opensource-src-6.8.4.tar.xz"
+            echo "QtBase source SHA-256: 532dfbf3fa3cbc68fa37441ea9e81c5009da044eaecda78ffaeafd8bd125532f"
+            echo "QtBase security patch asset: qtbase-6.8.4-security-patches.tar.gz"
+            echo "QtBase security review date: 2026-09-17"
             echo "Public workflow commercial-Qt publication: prohibited"
             echo "See docs/COMMERCIAL_RELEASE.md and docs/LGPL_RELINKING.md in the tagged source."
           } > dist/QT-REDISTRIBUTION.txt
@@ -334,7 +379,9 @@ jobs:
             dist/bezel-native-* \
             dist/bezel-lib-*.zip \
             dist/bezel-lib-*.zip.CHECKSUM \
-            dist/qtbase-everywhere-src-6.8.3.tar.xz \
+            dist/qtbase-everywhere-opensource-src-6.8.4.tar.xz \
+            dist/qtbase-6.8.4-security-patches.tar.gz \
+            dist/QT-SOURCE-MANIFEST.json \
             dist/SHA256SUMS \
             dist/QT-REDISTRIBUTION.txt \
             --verify-tag \

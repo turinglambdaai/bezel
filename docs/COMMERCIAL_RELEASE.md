@@ -8,10 +8,11 @@ This is an engineering compliance guide, not legal advice. The final product, in
 
 Bezel's **public GitHub Release workflow is LGPLv3-only** for Qt and deliberately uses a narrow, pinned configuration:
 
-- QtBase version: **6.8.3**.
+- QtBase public-source baseline: **6.8.4**.
 - Linkage: **dynamic**.
-- Exact corresponding-source archive: `qtbase-everywhere-src-6.8.3.tar.xz`.
-- Exact source SHA-256: `56001b905601bb9023d399f3ba780d7fa940f3e4861e496a7c490331f49e0b80`.
+- Exact base-source archive: `qtbase-everywhere-opensource-src-6.8.4.tar.xz`.
+- Exact base-source SHA-256: `532dfbf3fa3cbc68fa37441ea9e81c5009da044eaecda78ffaeafd8bd125532f`.
+- Security patch level: official Qt 6.8 patches reviewed through **2026-09-17**; all three public targets are rebuilt from the same verified source-and-patch set.
 - Public commercial-Qt publication: **prohibited by policy**.
 - Linux host/system libraries: **not copied into the Bezel public runtime**.
 - Microsoft Visual C++ runtime: **not copied into the Bezel public Windows runtime**.
@@ -38,9 +39,9 @@ A runtime missing this material is rejected by `scripts/verify-release-layout.rk
 
 ## Corresponding source
 
-`scripts/prepare-qt-compliance.py` downloads the exact QtBase source archive from `download.qt.io`, verifies the pinned SHA-256, and generates the licensing bundle from that verified source tree. It does not trust whatever Qt installation happened to exist on the CI machine for license text or attribution generation.
+`scripts/prepare-qt-compliance.py` downloads the exact QtBase source archive and every applied official Qt 6.8 security patch from `download.qt.io`, verifies every pinned SHA-256, and generates the licensing bundle from that verified source tree. It does not trust whatever Qt installation happened to exist on the CI machine for license text, attribution generation, or release binaries.
 
-For a tagged public release, the same exact verified QtBase source archive is published as a GitHub Release asset beside the binaries. The release also includes `SHA256SUMS`, covering the native archives, self-contained Racket packages, and QtBase source archive.
+For a tagged public release, the same verified QtBase base archive, patch bundle, and `QT-SOURCE-MANIFEST.json` are published as GitHub Release assets beside the binaries. The release also includes `SHA256SUMS`, covering the native archives, self-contained Racket packages, base source, patch bundle, and source manifest.
 
 Publishing the source with the release is intentionally stronger and easier to audit than relying only on an upstream URL. A downstream redistributor still needs to make the corresponding source available under **its own** control and satisfy its own obligations to recipients.
 
@@ -55,8 +56,8 @@ The product must not add terms or technical restrictions that take away LGPL rig
 | Runtime key | Build target | Clean smoke coverage | Raw runtime | Self-contained Racket package |
 | --- | --- | --- | --- | --- |
 | `linux-x86_64` | Ubuntu 22.04 x86_64 runner + pinned QtBase | Ubuntu 22.04 + Ubuntu 24.04, Racket only | `bezel-native-linux-x86_64.tar.gz` | `bezel-lib-linux-x86_64.zip` |
-| `windows-x86_64` | current GitHub Windows x64 + pinned QtBase | fresh Windows runner, Racket only | `bezel-native-windows-x86_64.zip` | `bezel-lib-windows-x86_64.zip` |
-| `macosx-aarch64` | current GitHub Apple Silicon macOS + pinned QtBase | fresh Apple Silicon macOS runner, Racket only | `bezel-native-macosx-aarch64.tar.gz` | `bezel-lib-macosx-aarch64.zip` |
+| `windows-x86_64` | current GitHub Windows x64 + source-built patched QtBase | fresh Windows runner, Racket only | `bezel-native-windows-x86_64.zip` | `bezel-lib-windows-x86_64.zip` |
+| `macosx-aarch64` | GitHub macOS 15 Apple Silicon + source-built patched QtBase | fresh Apple Silicon macOS runner, Racket only | `bezel-native-macosx-aarch64.tar.gz` | `bezel-lib-macosx-aarch64.zip` |
 
 "Racket only" means the smoke job does not install a Qt SDK/compiler. Ordinary target-OS runtime prerequisites still apply. On Windows, a compatible Microsoft Visual C++ 2015-2022 runtime is an OS/application prerequisite rather than part of the Bezel public archive.
 
@@ -68,7 +69,7 @@ The public Linux packager copies a dependency only if the resolved library belon
 
 ### Windows
 
-`windeployqt` is run without compiler-runtime, software OpenGL, or system D3D compiler redistribution. The packager rejects MSVC CRT DLLs and unexpected non-Qt top-level DLLs. A compatible VC++ runtime is documented as a prerequisite.
+`windeployqt` is run without compiler-runtime, software OpenGL, system D3D compiler, or system DXC redistribution. The packager rejects MSVC CRT, D3D compiler, DXC, software-OpenGL DLLs, and unexpected non-Qt top-level DLLs. A compatible VC++ runtime is documented as a prerequisite.
 
 ### macOS
 
@@ -81,10 +82,10 @@ The app-bundle staging area is restricted to Bezel plus Qt frameworks/plugins. T
 3. Create `vX.Y.Z` only from the intended `main` commit.
 4. The Release workflow validates tag/version consistency and `scripts/check-license-policy.py`.
 5. Tagged publication requires `BEZEL_QT_LICENSE_MODE=lgpl` and `BEZEL_QT_REDISTRIBUTION_ACK=approved-lgpl-v3`.
-6. The exact QtBase source is downloaded, SHA-256 verified, and converted into runtime licensing material.
-7. Each native package is rebuilt from the pinned Qt version and embeds that licensing material.
+6. The exact QtBase base source and official security patches are downloaded, SHA-256 verified, and converted into source/licensing material.
+7. Each native package is rebuilt from that same patched source and embeds the licensing material.
 8. Each self-contained package is tested on a fresh runner with `BEZEL_REQUIRE_PACKAGED_RUNTIME=1` so it cannot fall back to a developer/source Qt build.
-9. Only after all smoke tests pass does the workflow publish the binaries, exact QtBase source, redistribution record, and SHA-256 manifest.
+9. Only after all smoke tests pass does the workflow publish the binaries, exact QtBase base source, patch bundle/source manifest, redistribution record, and SHA-256 manifest.
 10. The final customer-facing application/installer still performs its own signing, channel, dependency, and legal review.
 
 Manual workflow-dispatch builds/test artifacts but does not create a GitHub Release.
@@ -120,7 +121,8 @@ Do not publish a public production release when any of these are true:
 
 - ABI/version/tag/generated bindings disagree.
 - The license policy checker fails.
-- The exact QtBase source cannot be downloaded or fails SHA-256 verification.
+- The exact QtBase base source or any required official security patch cannot be downloaded or fails SHA-256 verification.
+- The live official Qt 6.8 `qtbase` patch index differs from the reviewed inventory.
 - Required Qt/LGPL/third-party notice/relinking material is missing.
 - The package accidentally includes a forbidden non-Qt runtime dependency.
 - Bezel is no longer dynamically linked to the expected Qt libraries.
@@ -134,5 +136,6 @@ Do not publish a public production release when any of these are true:
 - Qt open-source/LGPL obligations: <https://www.qt.io/development/open-source-lgpl-obligations>
 - Qt open-source usage overview: <https://www.qt.io/development/download-open-source>
 - Qt deployment overview: <https://doc.qt.io/qt-6/deployment.html>
-- QtBase release source archive directory: <https://download.qt.io/official_releases/qt/6.8/6.8.3/submodules/>
+- QtBase 6.8.4 release source archive directory: <https://download.qt.io/official_releases/qt/6.8/6.8.4/submodules/>
+- Official Qt 6.8 security patch index: <https://download.qt.io/official_releases/qt/6.8/>
 - Microsoft Visual C++ redistribution guidance: <https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files>

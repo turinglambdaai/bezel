@@ -19,7 +19,7 @@ Racket 自带的 `racket/gui` 可以完成桌面开发，但要做现代、统�
 - **受检查的 native 边界** —— 加载时验证 shim ABI，尽早发现 Racket 绑定与 native 库版本不匹配。
 - **便携发行包** —— 支持的平台会把 `libbezel`、Qt runtime、Qt plugins 以及强制要求的许可证/重链接材料一起打进 Racket 包；最终用户不需要 Qt SDK、CMake 或 C++ 编译器。
 - **运行环境诊断** —— `raco bezel doctor` 会报告平台、架构、native 搜索路径、环境变量和 ABI 加载状态。
-- **默认拒绝不合规发布** —— 公共二进制固定使用 QtBase 6.8.3、LGPLv3 动态链接、经过哈希校验的对应源码，并由 CI 强制检查包内许可证与依赖边界。
+- **默认拒绝不合规发布** —— 公共二进制统一从 QtBase 6.8.4 公共源码和截至 2026-09-17 已审查的 Qt 6.8 官方安全补丁构建，采用 LGPLv3 动态链接，并由 CI 强制检查对应源码、许可证与依赖边界。
 
 <p align="center"><img src="docs/showcase.png" alt="Bezel Showcase —— Racket 写就的真 Qt 界面" width="720"></p>
 
@@ -65,7 +65,7 @@ raco bezel doctor
 
 每个发布包都会经历一次**真正的干净机器验证**：第二台 CI runner 只安装 Racket，不安装 Qt 开发环境、CMake 或 C++ 编译器；然后通过 `raco pkg install` 安装 zip，运行 `raco bezel doctor`，创建真实 Qt 控件、泵事件并执行清理。这个测试不会设置 `BEZEL_NATIVE_DIR`，因此验证的就是用户真正使用的 package-local runtime 路径。
 
-Release 同时发布原始 `bezel-native-*` runtime archive、自包含 Racket 包对应的 `.CHECKSUM`、统一 `SHA256SUMS`、Qt 再分发记录，以及**与公共 runtime 策略对应的、经过 SHA-256 校验的精确 QtBase 源码包**。每个 native runtime 自身还包含 `LICENSES/`，其中有 Bezel MIT License、Qt License 文本、第三方 attribution/notice、机器可读合规元数据和重链接说明。
+Release 同时发布原始 `bezel-native-*` runtime archive、自包含 Racket 包对应的 `.CHECKSUM`、统一 `SHA256SUMS`、Qt 再分发记录，以及**与公共 runtime 策略对应的、经过 SHA-256 校验的 QtBase 基础源码与官方安全补丁包**。每个 native runtime 自身还包含 `LICENSES/`，其中有 Bezel MIT License、Qt License 文本、第三方 attribution/notice、机器可读合规元数据和重链接说明。
 
 ## 从源码开发 Bezel
 
@@ -201,22 +201,22 @@ raco bezel doctor
 
 - `bezel-lib`、umbrella package、CMake shim、CHANGELOG 与 tag 的版本一致性检查；
 - 生成绑定可重复性检查；
-- 机器可读的 Qt 再分发策略和 QtBase 6.8.3 精确源码哈希检查；
+- 机器可读的 Qt 再分发策略、QtBase 6.8.4 精确源码哈希与官方补丁哈希检查；
 - Qt/LGPL/第三方许可证与 attribution 材料生成；
 - Qt 动态链接和各平台 package dependency boundary 检查；
 - 三平台 native build；
 - 便携 runtime 打包；
 - 干净 runner 上的自包含 Racket package 安装与真 Qt 控件 smoke test；
-- 公共二进制旁同时发布经过校验的精确 QtBase 源码；
+- 公共二进制旁同时发布经过校验的 QtBase 基础源码和已应用补丁包；
 - Release SHA-256 清单生成。
 
-Linux 公共 runtime 使用的 QtBase 会直接从这份相同的精确源码在 Ubuntu 22.04 上构建，保持 shared 动态库，禁用 ICU，并在 QtBase 支持的位置优先选择源码包内自带的第三方实现。这样既绕开公共在线 Qt 二进制额外依赖 ICU 73 的问题，也让 Linux 二进制与对应源码的关系更清晰、更容易审计。
+三个公共 runtime 都从同一份经过校验的源码与补丁集合构建，保持 shared 动态库并禁用 ICU；Linux 保持非 Qt 系统库为宿主前置依赖，macOS 禁用已经过时的 OpenGL/AGL 路径，Windows 排除编译器、DXC、D3D compiler 和软件 OpenGL 运行库。这样不会让公共在线二进制悄悄偏离已审计的安全基线，也让每个平台的二进制与对应源码关系可复现、可审计。
 
 完整检查表见 [docs/COMMERCIAL_RELEASE.md](docs/COMMERCIAL_RELEASE.md) 与 [docs/LGPL_RELINKING.md](docs/LGPL_RELINKING.md)。
 
 ## Qt 授权模型
 
-Bezel 本身采用 MIT License。**Bezel 的公共 GitHub 预编译 runtime 路径被明确限制为 Qt LGPLv3 + 动态链接。** 发布包包含必要 notice/重链接材料，并与二进制一起发布经过校验的精确 QtBase 源码。公共 workflow 会拒绝那种“仍然使用公共 Qt 构建，却只在变量里写成 commercial Qt”的发布方式。
+Bezel 本身采用 MIT License。**Bezel 的公共 GitHub 预编译 runtime 路径被明确限制为 Qt LGPLv3 + 动态链接。** 发布包包含必要 notice/重链接材料，并与二进制一起发布经过校验的 QtBase 基础源码和已应用官方补丁。公共 workflow 会拒绝那种“仍然使用公共 Qt 构建，却只在变量里写成 commercial Qt”的发布方式。
 
 专有商业产品当然可以采用 Qt 商业许可证，但应该使用单独的私有 release pipeline，并由许可证持有人使用真正受商业协议覆盖的 Qt 发行包和授权凭据构建；公共 Bezel workflow 不能被当作商业 Qt 授权来源的证明。
 
