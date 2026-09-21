@@ -2,8 +2,7 @@
 
 (require racket/file
          racket/list
-         racket/path
-         racket/string)
+         racket/path)
 
 (define-runtime-path script-dir ".")
 (define root (simplify-path (build-path script-dir 'up) #f))
@@ -22,11 +21,11 @@
 (define umbrella-version (pkg-version "bezel"))
 (define shim-version
   (capture-version 'shim
-                   #px"VERSION[ \\t]+([0-9]+\\.[0-9]+\\.[0-9]+)"
+                   #px"VERSION +([0-9]+[.][0-9]+[.][0-9]+)"
                    "bezel-shim/CMakeLists.txt"))
 (define changelog-version
   (capture-version 'changelog
-                   #px"##[ \\t]+([0-9]+\\.[0-9]+\\.[0-9]+)"
+                   #px"## +([0-9]+[.][0-9]+[.][0-9]+)"
                    "CHANGELOG.md"))
 
 (define versions
@@ -49,7 +48,12 @@
   (raise-user-error 'check-version "usage: racket scripts/check-version.rkt [expected-version]"))
 
 (when (pair? args)
-  (define expected (string-trim (car args) "v" #:left? #t #:right? #f))
+  (define raw (car args))
+  (define expected
+    (if (and (positive? (string-length raw))
+             (char=? (string-ref raw 0) #\v))
+        (substring raw 1)
+        raw))
   (unless (equal? lib-version expected)
     (error 'check-version
            "release tag/version mismatch: expected ~a from tag, repository is ~a"
