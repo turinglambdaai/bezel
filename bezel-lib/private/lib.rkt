@@ -26,6 +26,7 @@
 (require ffi/unsafe
          racket/path
          racket/runtime-path
+         racket/string
          "platform.rkt")
 
 (define-runtime-path here ".")
@@ -51,12 +52,38 @@
 (define last-try-error #f)
 (define loaded-bezel-library-path #f)
 
-(define (configure-qt-plugin-path! library-path)
-  ;; Respect an explicit application/operator setting. Otherwise a packaged
-  ;; runtime should be fully self-contained and teach Qt where its platform
-  ;; plugins live before QApplication is constructed.
+(define (prepend-path-once! directory)
+  (define dir (path->string (simple-form-path directory)))
+  (define old (or (getenv "PATH") ""))
+  (define sep (if (eq? (system-type 'os*) 'windows) ";" ":"))
+  (define entries
+    (if (string=? old "")
+        '()
+        (string-split old sep #:trim? #f)))
+  (unless (for/or ([entry (in-list entries)])
+            (string-ci=? entry dir))
+    (putenv "PATH"
+            (if (string=? old "")
+                dir
+                (string-append dir sep old)))))
+
+(define (configure-native-runtime! library-path)
+  (define canonical (simple-form-path library-path))
+
+  ;; A DLL loaded by absolute path does not make its directory the dependency
+  ;; search directory on Windows. Qt6Core.dll/Qt6Gui.dll/etc. live next to the
+  ;; packaged bezel.dll, so make that trusted package directory visible before
+  ;; ffi-lib calls LoadLibrary. The directory is prepended, not appended, so a
+  ;; system Qt installation cannot override the release-matched dependencies.
+  (when (eq? (system-type 'os*) 'windows)
+    (define dir (path-only canonical))
+    (when dir (prepend-path-once! dir)))
+
+  ;; Respect an explicit application/operator plugin setting. Otherwise a
+  ;; packaged runtime should be fully self-contained and teach Qt where its
+  ;; platform plugins live before QApplication is constructed.
   (unless (getenv "QT_PLUGIN_PATH")
-    (define plugin-root (qt-plugin-root-for library-path))
+    (define plugin-root (qt-plugin-root-for canonical))
     (when plugin-root
       (putenv "QT_PLUGIN_PATH" (path->string (simple-form-path plugin-root))))))
 
@@ -74,7 +101,7 @@
                    (lambda (e)
                      (set! last-try-error (exn-message e))
                      #f)])
-    (when path (configure-qt-plugin-path! path))
+    (when path (configure-native-runtime! path))
     (remember-load! (ffi-lib path-string) path source-description)))
 
 (define (try-system-name name version)
