@@ -8,9 +8,9 @@
   "public_release_license_mode": "lgpl",
   "public_release_linkage": "dynamic",
   "public_workflow_may_publish_commercial_qt": false,
-  "linux_qt_build_profile": "source-shared-no-icu-force-bundled-libs",
+  "linux_qt_build_profile": "source-shared-no-icu-host-deps-external",
   "linux_qt_icu_enabled": false,
-  "linux_qt_bundled_third_party": true,
+  "linux_non_qt_shared_libraries_are_host_prerequisites": true,
   "bundle_linux_system_libraries": false,
   "bundle_windows_msvc_runtime": false,
   "qt_components": [
