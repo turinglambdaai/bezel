@@ -1,12 +1,13 @@
 param(
   [string]$BuildDir = "bezel-shim/build",
-  [string]$DistDir = "dist"
+  [string]$DistDir = "dist",
+  [string]$ComplianceDir = "dist/compliance/runtime-licenses"
 )
 
 $ErrorActionPreference = "Stop"
 
 $arch = $env:PROCESSOR_ARCHITECTURE
-switch ($arch) {
+ switch ($arch) {
   "AMD64" { $arch = "x86_64" }
   "ARM64" { $arch = "aarch64" }
   default { $arch = $arch.ToLowerInvariant() }
@@ -19,6 +20,10 @@ $archive = Join-Path $DistDir "$asset.zip"
 Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue
 Remove-Item -Force $archive -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $root | Out-Null
+
+if (-not (Test-Path $ComplianceDir -PathType Container)) {
+  throw "license compliance material is missing: $ComplianceDir"
+}
 
 $probe = @(
   (Join-Path $BuildDir "bezel-deploy-probe.exe"),
@@ -34,42 +39,17 @@ if (-not $probe) { throw "bezel-deploy-probe.exe was not found in $BuildDir" }
 if (-not $shim) { throw "bezel.dll was not found in $BuildDir" }
 
 $deploy = (Get-Command windeployqt.exe -ErrorAction Stop).Source
-# We deploy compiler runtime DLLs app-local below. Asking windeployqt not to
-# emit vc_redist.x64.exe keeps the SDK archive zero-install: merely extracting
-# or installing the Bezel package is sufficient to load it.
-& $deploy --release --no-translations --no-compiler-runtime --dir $root $probe
+# Public Bezel binaries intentionally redistribute Bezel + Qt only. Compiler
+# runtimes and optional Microsoft graphics fallback DLLs are host prerequisites,
+# avoiding accidental third-party redistribution under unrelated license terms.
+& $deploy --release --no-translations --no-compiler-runtime --no-system-d3d-compiler --no-opengl-sw --dir $root $probe
 if ($LASTEXITCODE -ne 0) { throw "windeployqt failed with exit code $LASTEXITCODE" }
 
 Copy-Item $shim (Join-Path $root "bezel.dll") -Force
+Copy-Item $ComplianceDir (Join-Path $root "LICENSES") -Recurse -Force
 
-# Qt/MSVC builds depend on the Visual C++ runtime. windeployqt normally ships
-# the redistributable installer, which is appropriate for an application
-# installer but not for Bezel's self-contained SDK package. Copy the licensed
-# redistributable CRT DLLs from the active MSVC toolchain for app-local use.
-$crtArch = switch ($arch) {
-  "x86_64" { "x64" }
-  "aarch64" { "arm64" }
-  default { throw "unsupported MSVC redistributable architecture: $arch" }
-}
-
-if (-not $env:VCToolsRedistDir -or -not (Test-Path $env:VCToolsRedistDir)) {
-  throw "VCToolsRedistDir is not configured; run the packager from an MSVC developer environment"
-}
-
-$crtDirs = Get-ChildItem -Path (Join-Path $env:VCToolsRedistDir $crtArch) -Directory -Filter "Microsoft.VC*.CRT" -ErrorAction SilentlyContinue
-if (-not $crtDirs) {
-  throw "MSVC CRT redistributable directory was not found under $env:VCToolsRedistDir\$crtArch"
-}
-
-foreach ($crtDir in $crtDirs) {
-  Get-ChildItem -Path $crtDir.FullName -File -Filter "*.dll" | ForEach-Object {
-    Copy-Item $_.FullName (Join-Path $root $_.Name) -Force
-  }
-}
-
-# windeployqt focuses on the normal Windows QPA plugin. Bezel's automated
-# tests and many CI/server users also need the offscreen backend, so include it
-# explicitly when the Qt installation provides it.
+# windeployqt focuses on the normal Windows QPA plugin. Include offscreen too
+# for CI/rendering while keeping it inside the same QtBase provenance boundary.
 $pluginDir = $null
 $qtpaths = Get-Command qtpaths6.exe, qtpaths.exe -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($qtpaths) {
@@ -89,19 +69,51 @@ if ($pluginDir -and (Test-Path (Join-Path $pluginDir "platforms"))) {
   }
 }
 
+@"
+Bezel's official public Windows runtime does not redistribute the Microsoft
+Visual C++ runtime. A compatible Microsoft Visual C++ 2015-2022 Redistributable
+for the target architecture is an operating-system/application prerequisite.
+Racket itself may already require and install a compatible runtime.
+"@ | Set-Content -Path (Join-Path $root "SYSTEM-DEPENDENCIES.txt") -Encoding utf8
+
 foreach ($required in @(
   "bezel.dll",
   "Qt6Core.dll",
   "Qt6Gui.dll",
   "Qt6Widgets.dll",
-  "MSVCP140.dll",
-  "VCRUNTIME140.dll",
-  "VCRUNTIME140_1.dll",
   "platforms/qwindows.dll",
-  "platforms/qoffscreen.dll"
+  "platforms/qoffscreen.dll",
+  "LICENSES/NOTICE.md",
+  "LICENSES/RELINKING.md"
 )) {
   $path = Join-Path $root $required
   if (-not (Test-Path $path)) { throw "required runtime file is missing: $required" }
+}
+
+# Fail closed if deployment starts copying compiler/Microsoft runtime DLLs or
+# another unrelated top-level runtime into a public archive.
+$forbidden = @(
+  "MSVCP140.dll", "MSVCP140_1.dll", "VCRUNTIME140.dll", "VCRUNTIME140_1.dll",
+  "concrt140.dll", "D3Dcompiler_47.dll", "opengl32sw.dll"
+)
+foreach ($name in $forbidden) {
+  if (Test-Path (Join-Path $root $name)) {
+    throw "forbidden non-Qt redistributable found in public runtime: $name"
+  }
+}
+
+Get-ChildItem -Path $root -File -Filter "*.dll" | ForEach-Object {
+  if ($_.Name -ne "bezel.dll" -and $_.Name -notlike "Qt6*.dll") {
+    throw "unexpected non-Qt top-level DLL in public runtime: $($_.Name)"
+  }
+}
+
+$dumpbin = (Get-Command dumpbin.exe -ErrorAction Stop).Source
+$dependencies = (& $dumpbin /DEPENDENTS $shim | Out-String)
+foreach ($qtDll in @("Qt6Core.dll", "Qt6Gui.dll", "Qt6Widgets.dll")) {
+  if ($dependencies -notmatch [regex]::Escape($qtDll)) {
+    throw "bezel.dll is not dynamically linked to required $qtDll"
+  }
 }
 
 Compress-Archive -Path $root -DestinationPath $archive -CompressionLevel Optimal
