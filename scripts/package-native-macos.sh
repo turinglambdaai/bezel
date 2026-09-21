@@ -61,8 +61,8 @@ if [[ ! -e "$FRAMEWORKS/libbezel.0.dylib" ]]; then
   cp -L "$SHIM" "$FRAMEWORKS/libbezel.0.dylib"
 fi
 
-# macdeployqt normally deploys Cocoa only. Keep the offscreen QPA backend too
-# so packaged Bezel works in CI, render farms, and screenshot automation.
+# macdeployqt deploys the normal Cocoa backend. Keep the offscreen QPA backend
+# too so packaged Bezel also works in CI, render farms, and screenshot tools.
 QT_PLUGIN_DIR=""
 if command -v qtpaths6 >/dev/null 2>&1; then
   QT_PLUGIN_DIR="$(qtpaths6 --plugin-dir)"
@@ -76,6 +76,7 @@ if [[ -n "$QT_PLUGIN_DIR" && -e "$QT_PLUGIN_DIR/platforms/libqoffscreen.dylib" ]
 fi
 
 [[ -d "$PLUGINS/platforms" ]] || { echo "Qt platform plugins missing from app bundle" >&2; exit 1; }
+[[ -e "$PLUGINS/platforms/libqcocoa.dylib" ]] || { echo "Cocoa desktop platform plugin missing from app bundle" >&2; exit 1; }
 [[ -e "$PLUGINS/platforms/libqoffscreen.dylib" ]] || { echo "offscreen platform plugin missing from app bundle" >&2; exit 1; }
 [[ -e "$FRAMEWORKS/libbezel.0.dylib" ]] || { echo "libbezel missing from app bundle" >&2; exit 1; }
 
