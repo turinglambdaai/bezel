@@ -6,12 +6,15 @@ on:
       - 'v*'
   workflow_dispatch:
 
+env:
+  BEZEL_QT_VERSION: '6.8.3'
+
 permissions:
   contents: read
 
 jobs:
   metadata:
-    name: Verify release metadata
+    name: Verify release metadata and license policy
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -30,15 +33,18 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         run: racket scripts/check-version.rkt "$GITHUB_REF_NAME"
 
+      - name: Verify fail-closed license policy
+        run: python3 scripts/check-license-policy.py
+
   redistribution-policy:
-    name: Verify Qt redistribution approval
+    name: Verify public Qt redistribution approval
     needs: metadata
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Manual validation mode
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        run: echo "Manual release validation does not publish Qt binaries."
+        run: echo "Manual release validation builds LGPL test artifacts but does not publish binaries."
 
       - name: Gate tagged Qt redistribution
         if: startsWith(github.ref, 'refs/tags/v')
@@ -46,37 +52,47 @@ jobs:
         env:
           LICENSE_MODE: ${{ vars.BEZEL_QT_LICENSE_MODE }}
           REDISTRIBUTION_ACK: ${{ vars.BEZEL_QT_REDISTRIBUTION_ACK }}
-          SOURCE_OFFER_URL: ${{ vars.BEZEL_QT_SOURCE_OFFER_URL }}
         run: |
           set -euo pipefail
-          if [[ "$REDISTRIBUTION_ACK" != "approved" ]]; then
-            echo "Tagged releases redistribute Qt runtime binaries." >&2
-            echo "Set repository variable BEZEL_QT_REDISTRIBUTION_ACK=approved only after the distribution rights and obligations for the exact Qt build have been reviewed." >&2
+          if [[ "$LICENSE_MODE" != "lgpl" ]]; then
+            echo "The public Bezel release workflow is intentionally LGPL-only." >&2
+            echo "It builds from public Qt artifacts and cannot establish private commercial Qt entitlement or provenance." >&2
+            echo "Commercial-Qt releases must use a separate private pipeline backed by the licensed Qt distribution." >&2
             exit 1
           fi
+          if [[ "$REDISTRIBUTION_ACK" != "approved-lgpl-v3" ]]; then
+            echo "Set BEZEL_QT_REDISTRIBUTION_ACK=approved-lgpl-v3 only after reviewing the exact tagged LGPL distribution." >&2
+            exit 1
+          fi
+          echo "Public Qt redistribution mode: LGPLv3, dynamic linking, pinned Qt $BEZEL_QT_VERSION."
 
-          case "$LICENSE_MODE" in
-            commercial)
-              echo "Qt redistribution mode: commercial (repository owner acknowledgement)."
-              ;;
-            lgpl)
-              if [[ -z "$SOURCE_OFFER_URL" ]]; then
-                echo "LGPL redistribution requires BEZEL_QT_SOURCE_OFFER_URL to point to the distributor-controlled corresponding-source/source-offer location for the exact Qt build." >&2
-                exit 1
-              fi
-              echo "Qt redistribution mode: LGPL; source/source-offer location configured."
-              ;;
-            *)
-              echo "Set BEZEL_QT_LICENSE_MODE to either 'commercial' or 'lgpl'." >&2
-              exit 1
-              ;;
-          esac
+  compliance:
+    name: Build verified license/source bundle
+    needs: [metadata, redistribution-policy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate Qt license material and verified corresponding source
+        run: python3 scripts/prepare-qt-compliance.py --out-dir dist/compliance
+
+      - name: Verify pinned source archive digest
+        run: |
+          echo "56001b905601bb9023d399f3ba780d7fa940f3e4861e496a7c490331f49e0b80  dist/compliance/source/qtbase-everywhere-src-6.8.3.tar.xz" | sha256sum --check -
+
+      - name: Upload compliance inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: qt-compliance
+          path: dist/compliance
+          if-no-files-found: error
 
   native:
     name: Build release package (${{ matrix.platform }})
-    needs: [metadata, redistribution-policy]
+    needs: [metadata, redistribution-policy, compliance]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -100,31 +116,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download verified compliance material
+        uses: actions/download-artifact@v4
+        with:
+          name: qt-compliance
+          path: dist/compliance
+
       - name: Install Racket for package assembly
         uses: Bogdanp/setup-racket@v1.11
         with:
           version: '8.12'
           architecture: ${{ matrix.racket-arch }}
 
-      - name: Install Qt6 and packaging tools (Linux)
+      - name: Install Linux packaging prerequisites
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y qt6-base-dev qt6-base-dev-tools libgl1-mesa-dev patchelf
-          echo "CMAKE_PREFIX_PATH=/usr" >> $GITHUB_ENV
+          sudo apt-get install -y libgl1-mesa-dev patchelf
 
-      - name: Install Qt6 and packaging tools (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install qt cmake
-          echo "CMAKE_PREFIX_PATH=$(brew --prefix qt)" >> $GITHUB_ENV
-          echo "$(brew --prefix qt)/bin" >> $GITHUB_PATH
-
-      - name: Install Qt6 (Windows)
-        if: runner.os == 'Windows'
-        uses: jurplel/install-qt-action@v4
+      - name: Install exact QtBase
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
         with:
-          version: '6.7.*'
+          version: ${{ env.BEZEL_QT_VERSION }}
           archives: qtbase
           cache: true
 
@@ -150,16 +163,16 @@ jobs:
 
       - name: Package Linux runtime
         if: runner.os == 'Linux'
-        run: bash scripts/package-native-linux.sh bezel-shim/build dist
+        run: bash scripts/package-native-linux.sh bezel-shim/build dist dist/compliance/runtime-licenses
 
       - name: Package macOS runtime
         if: runner.os == 'macOS'
-        run: bash scripts/package-native-macos.sh bezel-shim/build dist
+        run: bash scripts/package-native-macos.sh bezel-shim/build dist dist/compliance/runtime-licenses
 
       - name: Package Windows runtime
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./scripts/package-native-windows.ps1 -BuildDir bezel-shim/build -DistDir dist
+        run: ./scripts/package-native-windows.ps1 -BuildDir bezel-shim/build -DistDir dist -ComplianceDir dist/compliance/runtime-licenses
 
       - name: Build self-contained Racket package
         run: racket scripts/package-racket-runtime.rkt "dist/${{ matrix.asset }}" "${{ matrix.platform }}" dist
@@ -237,7 +250,7 @@ jobs:
   publish:
     name: Publish GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: smoke
+    needs: [smoke, compliance]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -253,24 +266,33 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Download exact corresponding source
+        uses: actions/download-artifact@v4
+        with:
+          name: qt-compliance
+          path: dist/compliance
+
+      - name: Stage verified QtBase source
+        run: cp dist/compliance/source/qtbase-everywhere-src-6.8.3.tar.xz dist/
+
       - name: Generate SHA-256 checksums
         run: |
           cd dist
-          sha256sum bezel-native-* bezel-lib-*.zip > SHA256SUMS
+          sha256sum bezel-native-* bezel-lib-*.zip qtbase-everywhere-src-6.8.3.tar.xz > SHA256SUMS
+          grep 'qtbase-everywhere-src-6.8.3.tar.xz' SHA256SUMS | grep '^56001b905601bb9023d399f3ba780d7fa940f3e4861e496a7c490331f49e0b80 ' >/dev/null
           cat SHA256SUMS
 
       - name: Record redistribution mode
-        env:
-          LICENSE_MODE: ${{ vars.BEZEL_QT_LICENSE_MODE }}
-          SOURCE_OFFER_URL: ${{ vars.BEZEL_QT_SOURCE_OFFER_URL }}
         run: |
           {
             echo "Bezel release: $GITHUB_REF_NAME"
-            echo "Qt redistribution mode: $LICENSE_MODE"
-            if [[ "$LICENSE_MODE" == "lgpl" ]]; then
-              echo "Distributor-controlled Qt source/source-offer location: $SOURCE_OFFER_URL"
-            fi
-            echo "See docs/COMMERCIAL_RELEASE.md in the tagged source for release obligations and limitations."
+            echo "Qt redistribution mode: LGPLv3"
+            echo "Qt version: $BEZEL_QT_VERSION"
+            echo "Linkage: dynamic"
+            echo "QtBase source asset: qtbase-everywhere-src-6.8.3.tar.xz"
+            echo "QtBase source SHA-256: 56001b905601bb9023d399f3ba780d7fa940f3e4861e496a7c490331f49e0b80"
+            echo "Public workflow commercial-Qt publication: prohibited"
+            echo "See docs/COMMERCIAL_RELEASE.md and docs/LGPL_RELINKING.md in the tagged source."
           } > dist/QT-REDISTRIBUTION.txt
 
       - name: Publish release
@@ -281,6 +303,7 @@ jobs:
             dist/bezel-native-* \
             dist/bezel-lib-*.zip \
             dist/bezel-lib-*.zip.CHECKSUM \
+            dist/qtbase-everywhere-src-6.8.3.tar.xz \
             dist/SHA256SUMS \
             dist/QT-REDISTRIBUTION.txt \
             --verify-tag \
