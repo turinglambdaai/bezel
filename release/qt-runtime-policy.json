@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "qt_version": "6.8.3",
   "qt_module": "qtbase",
   "source_archive": "qtbase-everywhere-src-6.8.3.tar.xz",
@@ -8,6 +8,9 @@
   "public_release_license_mode": "lgpl",
   "public_release_linkage": "dynamic",
   "public_workflow_may_publish_commercial_qt": false,
+  "linux_qt_build_profile": "source-shared-no-icu-force-bundled-libs",
+  "linux_qt_icu_enabled": false,
+  "linux_qt_bundled_third_party": true,
   "bundle_linux_system_libraries": false,
   "bundle_windows_msvc_runtime": false,
   "qt_components": [
