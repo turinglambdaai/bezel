@@ -2,12 +2,12 @@
 set -euo pipefail
 
 # Build the exact reviewed QtBase source into a redistributable Linux prefix.
-# We intentionally disable ICU because Qt's public Linux binary package has an
-# external ICU 73 dependency that is not present on Ubuntu 22.04/24.04. Pulling
-# that binary dependency into Bezel would expand our redistribution/license
-# surface. Qt's configure system supports -no-icu; all bundled third-party
-# libraries selected here come from the exact QtBase source archive whose
-# license/attribution material is already shipped with the Bezel runtime.
+# ICU is disabled because Qt's public Linux binary package has an external ICU
+# dependency that is not part of Bezel's public redistribution boundary. Other
+# dynamically resolved Linux libraries remain host prerequisites: the Bezel
+# packager records them but does not copy them into the public runtime. If Qt
+# chooses one of its bundled third-party copies internally, that code comes from
+# the exact QtBase source archive whose licenses/attributions ship with Bezel.
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 POLICY="$REPO_ROOT/release/qt-runtime-policy.json"
@@ -57,21 +57,24 @@ rm -rf "$SRC_DIR" "$BUILD_DIR" "$PREFIX"
 mkdir -p "$SRC_DIR" "$BUILD_DIR" "$PREFIX"
 tar -xJf "$SOURCE_ARCHIVE" -C "$SRC_DIR" --strip-components=1
 
-# Keep this configuration deliberately small and auditable:
-# - shared: required by the public LGPL replacement/relinking model;
-# - no ICU: removes the external ICU 73 runtime dependency from QtCore;
-# - force bundled libs: zlib/jpeg/png/freetype/harfbuzz/pcre/etc. come from the
-#   exact QtBase source archive, so their source + notices travel together;
-# - no OpenSSL linkage: QtNetwork is not part of Bezel's runtime contract and
-#   must not pull OpenSSL into the package dependency closure;
-# - X11/xcb remains a host dependency, as Qt's deployment guidance recommends.
+# Deliberately small release configuration:
+# - shared: preserves the LGPL replacement/relinking model;
+# - no ICU: removes the incompatible external ICU dependency from QtCore;
+# - OpenSSL runtime loading: no link-time OpenSSL dependency is introduced;
+# - host Linux/X11/font/graphics libraries remain external prerequisites;
+# - Qt may use bundled third-party copies from the exact verified QtBase source
+#   when its own feature detection selects them. Their notices/source are
+#   already covered by the exact-source compliance bundle.
+#
+# Do not add undocumented umbrella flags here. The accepted Qt 6.8 options are
+# intentionally traceable to Qt's configure help/source and CI exercises this
+# exact command on Ubuntu 22.04.
 cd "$BUILD_DIR"
 "$SRC_DIR/configure" \
   -prefix "$PREFIX" \
   -release \
   -shared \
   -no-icu \
-  -force-bundled-libs \
   -openssl-runtime \
   -nomake examples \
   -nomake tests \
@@ -96,30 +99,24 @@ for required in \
   [[ -e "$required" ]] || { echo "pinned Qt build missing: $required" >&2; exit 1; }
 done
 
-if ldd "$PREFIX/lib/libQt6Core.so.6" | grep -E 'libicu[^ ]*\.so' >/dev/null; then
+# ICU is the one explicitly prohibited dependency in this profile. Other
+# non-Qt shared libraries are intentionally host prerequisites and are recorded
+# later by package-native-linux.sh rather than redistributed.
+if ldd "$PREFIX/lib/libQt6Core.so.6" "$PREFIX/lib/libQt6Gui.so.6" 2>/dev/null | grep -E 'libicu[^ ]*\.so' >/dev/null; then
   echo "pinned Linux Qt unexpectedly depends on ICU" >&2
   ldd "$PREFIX/lib/libQt6Core.so.6" >&2
   exit 1
 fi
 
-# Fail if a bundled-source selection unexpectedly became a separately linked
-# host dependency. The package is allowed to depend on the normal Linux/X11
-# platform stack, libc/libstdc++, graphics drivers, and dl/pthread primitives.
-for forbidden in libicu libpcre libpng libjpeg libfreetype libharfbuzz libzstd libdouble-conversion; do
-  if ldd "$PREFIX/lib/libQt6Core.so.6" "$PREFIX/lib/libQt6Gui.so.6" 2>/dev/null | grep -F "$forbidden" >/dev/null; then
-    echo "unexpected external dependency after -force-bundled-libs: $forbidden" >&2
-    exit 1
-  fi
-done
-
 cat > "$PREFIX/BEZEL-QT-BUILD.txt" <<EOF
 Qt version: $QT_VERSION
 Source archive: $QT_ARCHIVE
 Source SHA-256: $QT_SOURCE_SHA256
-Build profile: linux-x86_64-shared-no-icu-force-bundled-libs
+Build profile: linux-x86_64-source-shared-no-icu-host-deps-external
 Linkage: shared
 ICU: disabled
-Third-party policy: QtBase bundled copies where supported
+Host dependency policy: dynamically linked non-Qt Linux libraries are prerequisites and are not redistributed by Bezel
+Bundled dependency policy: any Qt-selected bundled third-party code comes from the exact verified QtBase source archive
 EOF
 
 echo "Pinned Linux QtBase ready: $PREFIX"
