@@ -1,8 +1,8 @@
 #lang racket/base
 
 ;; Commercial-hardening regression tests. These focus on failure paths,
-;; ownership transitions, and native/binding compatibility rather than
-;; the happy-path widget coverage in main.rkt.
+;; ownership transitions, generated bindings, and native/binding
+;; compatibility rather than only the happy-path widget coverage.
 
 (require rackunit
          bezel
@@ -20,6 +20,18 @@
                (sleep 0.02)
                (loop (sub1 n)))))))
 
+;; Like wait-for, but also drains the GUI marshal queue. This is the
+;; production pattern exercised by `run`, made explicit for a focused
+;; cross-thread regression test.
+(define (wait-for/pump pred [n 100])
+  (let loop ([n n])
+    (or (pred)
+        (and (> n 0)
+             (begin
+               (process-events! 5)
+               (sleep 0.01)
+               (loop (sub1 n)))))))
+
 (test-case "native ABI matches Racket bindings"
   (check-equal? loaded-bezel-abi-version expected-bezel-abi-version))
 
@@ -28,7 +40,26 @@
 (test-case "sentinel getters still surface wrong-widget errors"
   (define label (make-label "not a combo or list"))
   (check-exn exn:fail:bezel? (lambda () (combo-current-index label)))
-  (check-exn exn:fail:bezel? (lambda () (list-current-row label))))
+  (check-exn exn:fail:bezel? (lambda () (list-current-row label)))
+  (check-exn exn:fail:bezel? (lambda () (dial-value label))))
+
+(test-case "generated bindings marshal calls from worker threads"
+  (define dial (dial-new))
+  (dial-set-range dial 0 200)
+  (define result (box #f))
+  (thread
+   (lambda ()
+     (dial-set-value dial 123)
+     (set-box! result (dial-value dial))))
+  (check-true (wait-for/pump (lambda () (equal? (unbox result) 123)))
+              "generated bindings must marshal worker-thread Qt calls"))
+
+(test-case "generated constructor rejects a dead parent"
+  (define parent (make-widget))
+  (bezel-delete! parent)
+  (process-events! 10)
+  (check-true (wait-for (lambda () (not (bezel-alive? parent)))))
+  (check-exn exn:fail:bezel? (lambda () (dial-new parent))))
 
 (test-case "disconnect validates the connection owner"
   (define a (make-button "a"))
