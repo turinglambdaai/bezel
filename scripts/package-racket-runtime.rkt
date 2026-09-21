@@ -24,16 +24,27 @@
 (define-runtime-path script-dir ".")
 (define repo-root (simplify-path (build-path script-dir 'up) #f))
 (define source-package (build-path repo-root "bezel-lib"))
+(define verify-layout (build-path script-dir "verify-release-layout.rkt"))
 
 (make-directory* output-dir)
 
 (define staging-root (make-temporary-file "bezel-package~a" 'directory))
 (define staging-package (build-path staging-root "bezel-lib"))
 (define native-dest (build-path staging-package "native" platform-key))
+(define racket-exe (find-executable-path "racket"))
 (define raco (find-executable-path "raco"))
 
+(unless racket-exe
+  (raise-user-error 'package-racket-runtime "racket was not found on PATH"))
 (unless raco
   (raise-user-error 'package-racket-runtime "raco was not found on PATH"))
+
+;; Fail before producing a package if a packager forgot a core Qt library or
+;; either the real desktop QPA backend or the offscreen backend used by CI.
+(unless (system* racket-exe
+                 (path->string verify-layout)
+                 (path->string runtime-root))
+  (error 'package-racket-runtime "native runtime layout validation failed"))
 
 (dynamic-wind
  void
