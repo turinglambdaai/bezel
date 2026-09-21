@@ -1,27 +1,51 @@
 # Qt redistribution gate
 
-Bezel's CI can build portable runtime bundles that contain Qt shared libraries and plugins. A technically valid bundle is not automatically a legally distributable bundle.
+Bezel's public CI can build portable runtime bundles containing Qt shared libraries and plugins. A technically valid bundle is not automatically a legally distributable bundle, so public tagged releases fail closed unless the exact redistribution policy is acknowledged.
 
-Tagged GitHub Releases therefore require an explicit repository-owner acknowledgement before any Qt runtime is published.
+## Public release policy
 
-## Repository variables
+The public GitHub Actions release path is intentionally narrow and auditable:
 
-Configure these GitHub Actions repository variables before creating a production tag:
+- Qt is pinned to **QtBase 6.8.3**.
+- Bezel and Qt are dynamically linked.
+- Public prebuilt binaries use the **LGPLv3** path only.
+- The exact QtBase source archive is downloaded from `download.qt.io`, verified against the reviewed SHA-256 recorded in `release/qt-runtime-policy.json`, and published as a release asset beside the binaries.
+- License texts, Bezel's MIT license, third-party attribution metadata/notices, source metadata, and relinking instructions are embedded in every native runtime package.
+- Linux host/system libraries are not recursively copied into the public Bezel bundle.
+- The Microsoft Visual C++ runtime is not copied into the public Windows bundle; it remains a target-machine prerequisite.
 
-- `BEZEL_QT_REDISTRIBUTION_ACK=approved`
-- `BEZEL_QT_LICENSE_MODE=commercial` or `BEZEL_QT_LICENSE_MODE=lgpl`
-- for `lgpl`, `BEZEL_QT_SOURCE_OFFER_URL` must identify the distributor-controlled corresponding-source/source-offer location for the exact Qt build being redistributed
+The public workflow **does not publish a commercial-Qt build**. A commercial Qt license is a valid product strategy, but a public CI job using public Qt artifacts cannot prove private commercial entitlement or that a binary came from the licensed commercial distribution. A commercial-Qt product release therefore belongs in a separate private pipeline whose Qt provenance and entitlements are controlled by the license holder.
 
-The Release workflow fails closed when these values are absent or invalid. Manual workflow-dispatch runs can still build and smoke-test artifacts, but they do not publish a GitHub Release.
+## Repository variables for tagged public releases
 
-## Why the gate exists
+Before creating a production tag, configure:
 
-Bezel is MIT licensed, but the Qt binaries bundled by the native packagers keep their own licenses. The repository owner is responsible for ensuring that the exact Qt build used for a release is covered by the selected redistribution terms.
+- `BEZEL_QT_LICENSE_MODE=lgpl`
+- `BEZEL_QT_REDISTRIBUTION_ACK=approved-lgpl-v3`
 
-For LGPL distribution, Qt's published guidance includes obligations such as providing the LGPL terms and a prominent notice, allowing relinking/replacement of the LGPL libraries, and making corresponding Qt source available (or providing an appropriate written offer) under the distributor's control. Product-specific legal review remains appropriate.
+No external source-offer URL is accepted as a substitute for the tagged release's source asset. The release itself publishes the exact verified `qtbase-everywhere-src-6.8.3.tar.xz` used as the compliance source reference.
 
-For commercial Qt licensing, the acknowledgement means the repository owner has confirmed that the Qt build and intended redistribution are covered by the applicable commercial agreement. The public workflow cannot verify private license entitlements.
+Manual workflow-dispatch runs may build and smoke-test artifacts but do not publish a GitHub Release.
+
+## Automated blockers
+
+The repository contains `release/qt-runtime-policy.json` and `scripts/check-license-policy.py`. CI fails when the public workflow drifts from the pinned version/hash, switches away from dynamic LGPL distribution, re-enables public commercial-Qt publication, reintroduces wildcard Qt versions, or re-enables bundled Linux system/MSVC runtime libraries.
+
+The native packagers also reject unexpected non-Qt runtime libraries in the public package and `scripts/verify-release-layout.rkt` rejects packages missing mandatory licensing/relinking material.
+
+## LGPL obligations remain product-level obligations
+
+The automation is designed to make compliance evidence reproducible, but downstream products still have obligations of their own. In particular, preserve applicable Qt/LGPL notices and license texts, make corresponding Qt source available under the distributor's control, and preserve the user's ability to replace/relink the LGPL libraries and run the modified result where required. See `LGPL_RELINKING.md`.
+
+Application stores, DRM/signing designs, locked devices, contractual terms, or other distribution constraints can conflict with LGPL rights. Evaluate the final application and distribution channel separately. When the product cannot satisfy those conditions, use an appropriate Qt commercial licensing arrangement and a private commercial release pipeline instead of this public LGPL binary path.
 
 ## Release record
 
-A successful tagged release includes `QT-REDISTRIBUTION.txt`. It records the declared redistribution mode and, for LGPL releases, the configured source/source-offer location. This is an audit aid, not a substitute for the actual license obligations.
+A tagged public release includes:
+
+- `QT-REDISTRIBUTION.txt` recording Qt version, LGPL mode, dynamic linkage, source asset name, and source SHA-256;
+- the exact QtBase source archive;
+- `SHA256SUMS` covering native runtimes, self-contained packages, and the source archive;
+- embedded `LICENSES/` material inside every runtime archive/package.
+
+This is an engineering compliance control and audit trail, not a substitute for product-specific legal review.
