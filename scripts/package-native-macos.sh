@@ -95,6 +95,16 @@ add_rpath_if_missing() {
   fi
 }
 
+normalize_install_id() {
+  local binary="$1"
+  local desired="$2"
+  local current=""
+  current="$(otool -D "$binary" 2>/dev/null | tail -n +2 | head -n 1 || true)"
+  if [[ -n "$current" && "$current" != "$desired" ]]; then
+    install_name_tool -id "$desired" "$binary"
+  fi
+}
+
 rewrite_macho() {
   local binary="$1"
   local runtime_rpath="$2"
@@ -117,8 +127,10 @@ rewrite_macho() {
 while IFS= read -r -d '' binary; do
   if [[ "$binary" == "$FRAMEWORKS"/*.framework/Versions/*/* ]]; then
     rewrite_macho "$binary" '@loader_path/../../..'
+    normalize_install_id "$binary" "@rpath/${binary#${FRAMEWORKS}/}"
   else
     rewrite_macho "$binary" '@loader_path'
+    normalize_install_id "$binary" "@rpath/$(basename "$binary")"
   fi
 done < <(find "$FRAMEWORKS" -type f -print0)
 
