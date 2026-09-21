@@ -27,18 +27,40 @@
   (unless (file-exists? path)
     (error 'verify-release-layout "missing ~a: ~a" label path)))
 
+;; Licensing is part of the runtime ABI/distribution contract, not an optional
+;; release-note attachment. A self-contained binary package without this
+;; material is invalid even if the native library itself loads.
+(for ([entry (in-list
+              '((notice "LICENSES" "NOTICE.md")
+                (bezel-license "LICENSES" "BEZEL-MIT.txt")
+                (relinking "LICENSES" "RELINKING.md")
+                (compliance-manifest "LICENSES" "COMPLIANCE.json")
+                (qt-policy "LICENSES" "QT-RUNTIME-POLICY.json")
+                (qt-source-record "LICENSES" "Qt" "QT-SOURCE.txt")
+                (qt-attributions "LICENSES" "Qt" "QTBASE-THIRD-PARTY-NOTICES.md")
+                (lgpl-v3 "LICENSES" "Qt" "LICENSES" "LGPL-3.0-only.txt")
+                (gpl-v3 "LICENSES" "Qt" "LICENSES" "GPL-3.0-only.txt")))])
+  (require-file (car entry) (apply build-path root (cdr entry))))
+
 (case (system-type)
   [(windows)
    (for ([name (in-list '("bezel.dll"
                           "Qt6Core.dll"
                           "Qt6Gui.dll"
-                          "Qt6Widgets.dll"
-                          "MSVCP140.dll"
-                          "VCRUNTIME140.dll"
-                          "VCRUNTIME140_1.dll"))])
+                          "Qt6Widgets.dll"))])
      (require-file name (build-path root name)))
    (require-file 'qwindows (build-path root "platforms" "qwindows.dll"))
-   (require-file 'qoffscreen (build-path root "platforms" "qoffscreen.dll"))]
+   (require-file 'qoffscreen (build-path root "platforms" "qoffscreen.dll"))
+   ;; Microsoft CRT redistribution is intentionally outside the public Bezel
+   ;; package. Reintroducing it requires a separate license/provenance decision.
+   (for ([name (in-list '("MSVCP140.dll"
+                          "MSVCP140_1.dll"
+                          "VCRUNTIME140.dll"
+                          "VCRUNTIME140_1.dll"
+                          "concrt140.dll"))])
+     (when (file-exists? (build-path root name))
+       (error 'verify-release-layout
+              "forbidden third-party redistributable present: ~a" name)))]
   [(macosx)
    (define frameworks (build-path root "BezelRuntime.app" "Contents" "Frameworks"))
    (define plugins (build-path root "BezelRuntime.app" "Contents" "PlugIns" "platforms"))
@@ -59,4 +81,4 @@
    (require-file 'qxcb (build-path root "platforms" "libqxcb.so"))
    (require-file 'qoffscreen (build-path root "platforms" "libqoffscreen.so"))])
 
-(displayln "release runtime layout: OK")
+(displayln "release runtime layout + licensing material: OK")
