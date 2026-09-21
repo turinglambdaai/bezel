@@ -135,15 +135,27 @@ jobs:
           - os: ubuntu-latest
             asset: bezel-native-linux-x86_64
             archive: bezel-native-linux-x86_64.tar.gz
+            platform: linux-x86_64
+            racket-arch: x64
           - os: windows-latest
             asset: bezel-native-windows-x86_64
             archive: bezel-native-windows-x86_64.zip
+            platform: windows-x86_64
+            racket-arch: x64
           - os: macOS-latest
             asset: bezel-native-macosx-aarch64
             archive: bezel-native-macosx-aarch64.tar.gz
+            platform: macosx-aarch64
+            racket-arch: arm64
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Racket for package assembly
+        uses: Bogdanp/setup-racket@v1.11
+        with:
+          version: '8.12'
+          architecture: ${{ matrix.racket-arch }}
 
       - name: Install Qt6 and packaging tools (Linux)
         if: runner.os == 'Linux'
@@ -200,15 +212,21 @@ jobs:
         shell: pwsh
         run: ./scripts/package-native-windows.ps1 -BuildDir bezel-shim/build -DistDir dist
 
-      - name: Upload native archive
+      - name: Build self-contained Racket package
+        run: racket scripts/package-racket-runtime.rkt "dist/${{ matrix.asset }}" "${{ matrix.platform }}" dist
+
+      - name: Upload release inputs
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
-          path: dist/${{ matrix.archive }}
+          path: |
+            dist/${{ matrix.archive }}
+            dist/bezel-lib-${{ matrix.platform }}.zip
+            dist/bezel-lib-${{ matrix.platform }}.zip.CHECKSUM
           if-no-files-found: error
 
   native-smoke:
-    name: Clean runtime smoke (${{ matrix.asset }})
+    name: Clean package smoke (${{ matrix.platform }})
     needs: native-package
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
@@ -218,15 +236,15 @@ jobs:
         include:
           - os: ubuntu-latest
             asset: bezel-native-linux-x86_64
-            archive: bezel-native-linux-x86_64.tar.gz
+            platform: linux-x86_64
             racket-arch: x64
           - os: windows-latest
             asset: bezel-native-windows-x86_64
-            archive: bezel-native-windows-x86_64.zip
+            platform: windows-x86_64
             racket-arch: x64
           - os: macOS-latest
             asset: bezel-native-macosx-aarch64
-            archive: bezel-native-macosx-aarch64.tar.gz
+            platform: macosx-aarch64
             racket-arch: arm64
 
     steps:
@@ -238,37 +256,22 @@ jobs:
           version: '8.12'
           architecture: ${{ matrix.racket-arch }}
 
-      - name: Download native archive
+      - name: Download packaged artifacts
         uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.asset }}
           path: dist
 
-      - name: Extract runtime (Linux/macOS)
-        if: runner.os != 'Windows'
-        run: |
-          mkdir -p dist/unpacked
-          tar -xzf "dist/${{ matrix.archive }}" -C dist/unpacked
+      - name: Install self-contained Bezel package
+        run: raco pkg install --auto --no-docs --name bezel-lib "dist/bezel-lib-${{ matrix.platform }}.zip"
 
-      - name: Extract runtime (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: Expand-Archive -Path "dist/${{ matrix.archive }}" -DestinationPath "dist/unpacked" -Force
-
-      - name: Link Racket packages
-        run: |
-          raco pkg install --auto --no-docs --link ./bezel-lib
-          raco pkg install --auto --no-docs --link ./bezel
-
-      - name: Diagnose packaged runtime
+      - name: Diagnose package-local runtime
         env:
-          BEZEL_NATIVE_DIR: ${{ github.workspace }}/dist/unpacked/${{ matrix.asset }}
           QT_QPA_PLATFORM: offscreen
         run: raco bezel doctor
 
       - name: Run packaged runtime smoke test
         env:
-          BEZEL_NATIVE_DIR: ${{ github.workspace }}/dist/unpacked/${{ matrix.asset }}
           QT_QPA_PLATFORM: offscreen
         run: racket scripts/native-smoke.rkt
 
