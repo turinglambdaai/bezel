@@ -8,20 +8,23 @@ Native [Qt 6](https://www.qt.io/) GUIs for [Racket](https://racket-lang.org/). W
 
 ## Why Bezel?
 
-Racket's `racket/gui` works but is hard to style into a product-grade UI, and Glaze's web approach trades native widgets for HTML. Bezel takes the third path: bind the industry-standard widget toolkit, the way mature languages do it — a C++ shim with a stable C ABI, a signal bridge, ownership tracking, and a spec-driven generator (the PySide/Shiboken and PyQt/SIP architecture, brought to Racket).
+Racket's `racket/gui` works but is hard to style into a product-grade UI, and Glaze's web approach trades native widgets for HTML. Bezel takes the third path: bind the industry-standard widget toolkit, the way mature languages do it — a C++ shim with a stable C ABI, a signal bridge, explicit lifetime rules, and a spec-driven generator.
 
 You get:
 
-- **Real native widgets** — QMainWindow, buttons, inputs, lists, sliders, menus, dialogs; native look on all three platforms
-- **QSS styling** — style anything with Qt's CSS dialect (`QPushButton { background: #C15F3C; border-radius: 8px; }`)
-- **A threading story that actually works** — call any widget from any Racket thread; signal handlers are plain Racket procedures
-- **Agent-friendly verification** — `widget-grab-png` renders any widget to PNG bytes; the whole test suite runs headless on CI with `QT_QPA_PLATFORM=offscreen`
+- **Real Qt widgets** — QMainWindow, buttons, inputs, lists, sliders, menus, dialogs, plus a generator for expanding coverage
+- **QSS styling** — style widgets with Qt's CSS dialect (`QPushButton { background: #C15F3C; border-radius: 8px; }`)
+- **A threading story that actually works** — call public Bezel widget APIs from any Racket thread; signal handlers are plain Racket procedures
+- **Agent-friendly verification** — `widget-grab-png` renders widgets to PNG bytes; the test suite runs headless on CI with `QT_QPA_PLATFORM=offscreen`
+- **A checked native boundary** — the Racket package verifies the loaded shim ABI before exposing the API
 
 ### Hello Bezel
 
 ```racket
 #lang racket/base
 (require bezel)
+
+(make-application #:name "Hello Bezel")
 
 (define n (box 0))
 (define count (make-label "Clicked 0 times"))
@@ -40,22 +43,22 @@ You get:
 | | Bezel (Qt 6) | racket/gui | Glaze (web UI) |
 |---|---|---|---|
 | Toolkit | Qt 6 Widgets | wx native wrappers | HTML/CSS/JS |
-| Widget richness | full Qt set | basic set | unlimited (web) |
+| Widget richness | core set today; generator-backed expansion | basic set | unlimited (web) |
 | Styling | **QSS (CSS dialect)** | limited | full CSS |
-| Threading | **any Racket thread** | eventspace-bound | any thread |
-| Native toolchain needed | C++ compiler + Qt 6 (or prebuilt shim) | none | none |
-| Binary size | small (system Qt) | small | small |
+| Threading | **public API callable from any Racket thread** | eventspace-bound | any thread |
+| Native toolchain needed | currently yes | none | none |
+| Binary size | small with system Qt | small | small |
 
-Honest gaps: the shim needs a one-time native build (prebuilt binaries are on the roadmap); the typed-signal table covers `bool`/`int`/`QString` first arguments — other signal types deliver without arguments; and v0.1 covers the core widget set, not all of Qt.
+Current gaps are explicit: the public release does not yet ship portable prebuilt shims/Qt deployment bundles, and v0.1 covers the core widget set rather than all of Qt. Supported typed signal arguments currently include `bool`, `int`, `double`, and `QString`; unsupported signal parameter types are delivered without converted arguments.
 
 ## How it works
 
-Four pieces, mirroring the mature binding families (Shiboken, SIP, Qtah):
+Four pieces, mirroring mature binding families such as Shiboken and SIP:
 
-1. **C++ shim, C ABI** (`bezel-shim/`) — Racket's FFI speaks C and Qt speaks C++, so ~90 flat C functions wrap the Qt classes behind opaque handles (`bezel.h` is the whole contract)
-2. **Cooperative marshaling** — Qt demands its GUI thread; Racket CS schedules threads cooperatively and a raw foreign wait can freeze them all. Bezel's C side never blocks on a cross-thread handoff: the Racket layer enqueues, waits on a Racket semaphore, and the pump drains it
-3. **Signal bridge** — Qt signal → C++ sink object → locked queue → Racket dispatcher thread → your procedure; Qt calls in the handler marshal back automatically
-4. **Ownership registry** — Qt's parent rule with Racket finalizers for parentless objects; dead handles are detectable (`bezel-alive?`), never crash
+1. **C++ shim, C ABI** (`bezel-shim/`) — Racket's FFI speaks C and Qt speaks C++, so flat C functions wrap Qt classes behind validated opaque handles (`bezel.h` is the native contract)
+2. **Cooperative marshaling** — Qt demands its GUI thread; Racket CS schedules threads cooperatively and a raw foreign wait can freeze them all. Bezel's C side never performs a blocking cross-thread handoff: the Racket layer enqueues, waits on a Racket semaphore, and the GUI pump drains it
+3. **Signal bridge** — Qt signal → C++ sink object → locked queue → Racket dispatcher thread → your procedure; Qt calls made from the handler marshal back automatically
+4. **Lifetime registry** — Qt parent ownership plus a registry of live `QObject` handles. Parentless objects remain alive until explicit deletion or application teardown; Bezel deliberately avoids deleting GC finalizers, and dead handles are rejected instead of dereferenced
 
 The deep dive is in [docs/architecture.md](docs/architecture.md).
 
@@ -64,22 +67,23 @@ The deep dive is in [docs/architecture.md](docs/architecture.md).
 | Capability | macOS | Windows | Linux |
 |---|---|---|---|
 | Application / run loop (pump) | ✅ | ✅ | ✅ |
-| Core widgets (13) + layouts (4) | ✅ | ✅ | ✅ |
+| Core widgets + layouts | ✅ | ✅ | ✅ |
 | Menus + actions | ✅ | ✅ | ✅ |
 | Signals (typed: bool / int / double / QString) | ✅ | ✅ | ✅ |
 | Cross-thread widget access | ✅ | ✅ | ✅ |
+| Generated-binding cross-thread marshaling | ✅ | ✅ | ✅ |
 | QSS styling | ✅ | ✅ | ✅ |
 | `widget-grab-png` (screenshot) | ✅ | ✅ | ✅ |
 | Headless CI (offscreen e2e) | ✅ | ✅ | ✅ |
 
-All three platforms run the same real-object e2e suite in CI — 23 tests covering widgets, layouts, typed signal delivery, the pump loop, and PNG rendering.
+All three platforms run the same real-object end-to-end suite in CI, covering widgets, layouts, typed signal delivery, cross-thread access, the pump loop, lifecycle/error paths, and PNG rendering. CI also verifies that checked-in generated bindings reproduce exactly from their JSON specs.
 
 ## Requirements
 
 | Dependency | Purpose |
 |------------|---------|
 | [Racket](https://racket-lang.org/) | 8.0 or later (includes `raco`) |
-| Qt 6 + CMake + C++17 compiler | to build `libbezel` (one command; prebuilt binaries are on the roadmap) |
+| Qt 6 + CMake + C++17 compiler | required today to build `libbezel` |
 
 ## Quick Start
 
@@ -92,7 +96,7 @@ cmake -S bezel-shim -B bezel-shim/build -DCMAKE_BUILD_TYPE=Release
 cmake --build bezel-shim/build
 ```
 
-Point `$BEZEL_LIBRARY` at the built library if it is not on the system path. macOS needs Qt from Homebrew (`brew install qt`), Linux the distro's `qt6-base-dev`.
+Point `$BEZEL_LIBRARY` at the built library if it is not on the system path. macOS needs Qt from Homebrew (`brew install qt`); Linux needs the distribution's Qt 6 development package.
 
 ### 2. Install the package
 
@@ -120,12 +124,7 @@ A real Qt window opens. `examples/counter.rkt` shows QSS styling; `examples/form
 (quit! 0)                           ; run returns 0
 ```
 
-`run` is a pump loop, not a blocking exec — that's what keeps signal
-handlers and cross-thread calls alive (see the architecture doc).
-Closing the last visible window also stops the pump (the pump-loop
-equivalent of Qt's quit-on-last-window-closed); `(widget-close! win)`
-closes programmatically, and `set-quit-on-last-window-closed!` toggles
-the behavior.
+`run` is a pump loop, not a blocking exec — that's what keeps signal handlers and cross-thread calls alive. Closing the last visible window also stops the pump; `(widget-close! win)` closes programmatically, and `set-quit-on-last-window-closed!` toggles that behavior.
 
 ### Widgets and layouts
 
@@ -146,13 +145,14 @@ Tree form for composition (`vbox` / `hbox` / `grid` / `form` / `stretch`), imper
 ### Signals
 
 ```racket
-(connect! btn "clicked()" (lambda _ (displayln "clicked!")))
+(define conn-id
+  (connect! btn "clicked()" (lambda _ (displayln "clicked!"))))
 (connect! slider "valueChanged(int)" (lambda (v) (displayln v)))
 (connect! edit "textChanged(QString)" (lambda (s) (displayln s)))
 (disconnect! btn conn-id)
 ```
 
-Signals use Qt normalized signatures. Handlers run on Bezel's dispatcher thread and may freely mix Racket computation with widget calls (marshaled back to the GUI thread automatically).
+Signals use Qt normalized signatures. Handlers run on Bezel's dispatcher thread and may freely mix Racket computation with public widget calls; those calls are marshaled back to the GUI thread automatically. Connection records and Racket closures are retired on explicit disconnect, target destruction, and application cleanup.
 
 ### Menus and dialogs
 
@@ -167,7 +167,7 @@ Signals use Qt normalized signatures. Handlers run on Bezel's dispatcher thread 
 ```racket
 (define png (widget-grab-png win))       ; real PNG bytes, any widget
 (process-events! 50)                     ; pump without blocking
-(emit-test-signal! btn "clicked()")      ; drive the full signal bridge in tests
+(emit-test-signal! btn "clicked()")      ; drive the signal bridge in tests
 ```
 
 The README's showcase image is itself generated by `scripts/showcase.rkt` — a real Qt render produced headlessly.
@@ -175,12 +175,14 @@ The README's showcase image is itself generated by `scripts/showcase.rkt` — a 
 ### Object model
 
 ```racket
-(bezel-alive? widget)          ; has Qt destroyed it?
-(bezel-delete! widget)         ; explicit deleteLater
-(object-name widget)           ; names, reparenting, GC-safe handles
+(bezel-alive? widget)             ; has Qt destroyed it?
+(bezel-delete! widget)            ; explicit deleteLater
+(qt-object-name widget)           ; QObject name
+(set-qt-object-name! widget "x")
+(object-set-parent! widget parent)
 ```
 
-Ownership follows Qt's parent rule: created with a parent → Qt owns it; parentless → Bezel tracks it and everything is reaped at application teardown (`bezel-delete!` for eager reclamation). `layout!` hands ownership to Qt automatically. There are no GC-driven deletes — a late finalizer destroying a recycled widget address is the kind of race Bezel refuses to have.
+Ownership follows Qt's parent rule: created with a parent → Qt owns it; parentless → it remains live until explicit deletion or application teardown. `layout!` hands ownership to Qt automatically. There are no GC-driven deletes — a late finalizer destroying a recycled widget address is the kind of race Bezel deliberately avoids.
 
 ## Monorepo Structure
 
@@ -193,18 +195,18 @@ bezel/
 ├── bezel-test/       # Tests (headless e2e, run on all 3 OSes)
 ├── examples/         # hello / counter / form
 ├── tools/generator/  # JSON class specs → C++ + Racket bindings
-└── docs/             # architecture.md deep dive
+└── docs/             # architecture and design notes
 ```
 
 ## Adding Qt classes (the generator)
 
-Coverage scales the way Shiboken/SIP scale it — spec-driven. Write a JSON spec describing constructors and methods, then:
+Coverage scales spec-first. Write a JSON spec describing constructors and methods, then:
 
 ```bash
 racket tools/generator/generate.rkt tools/generator/specs/dial.json
 ```
 
-emits both the shim side (`src/generated/dial_gen.cpp`) and the Racket side (`bezel-lib/generated/dial_gen.rkt`) — rebuild, and the new class is bound end to end. `QDial` ships as the worked example.
+This emits both the shim side (`bezel-shim/src/generated/dial_gen.cpp`) and the Racket side (`bezel-lib/generated/dial_gen.rkt`). Generated public calls use the same liveness checks, error propagation, and cooperative GUI marshaling rules as handwritten bindings. `QDial` ships as the worked example, and CI rejects stale generated files.
 
 ## Testing
 
@@ -212,15 +214,20 @@ emits both the shim side (`src/generated/dial_gen.cpp`) and the Racket side (`be
 QT_QPA_PLATFORM=offscreen raco test bezel-test/
 ```
 
-Real Qt objects, real signal deliveries, real PNG grabs — headless on every OS. CI (`.github/workflows/ci.yml`) builds the shim with Qt 6 on ubuntu/windows/macos and runs the same suite, then regenerates the showcase screenshot as an artifact.
+Real Qt objects, real signal deliveries, real PNG grabs — headless on every OS. CI (`.github/workflows/ci.yml`) builds the shim with Qt 6 on Ubuntu, Windows, and macOS, runs the same suite, verifies generated output, builds docs, and produces showcase artifacts.
+
+## Production / distribution status
+
+The core runtime is tested on all three desktop platforms, but the distribution story is intentionally still marked incomplete: there are currently no GitHub release artifacts containing a portable prebuilt shim and its required Qt runtime deployment. Until that pipeline exists and is verified on clean machines, Bezel should be treated as **source-build ready**, not **zero-toolchain install ready**.
 
 ## Roadmap
 
 - [x] **Phase 1** — C++ shim + C ABI, widgets, layouts, menus, dialogs
-- [x] **Phase 2** — Signal bridge with typed args, cooperative threading model, ownership registry, generator pipeline
+- [x] **Phase 2** — Signal bridge with typed args, cooperative threading model, lifetime registry, generator pipeline
 - [x] **Phase 3** — Headless e2e on all 3 platforms, PNG verification, showcase generation
-- [ ] **Phase 4** — Prebuilt shim binaries per platform (`raco pkg install` with no toolchain)
-- [ ] **Phase 5** — Wider widget coverage via specs; `bezel/class` (send-style API); packaging story for shipping apps
+- [x] **Phase 3.5** — ABI guard, lifecycle hardening, generated-binding safety, reproducibility CI
+- [ ] **Phase 4** — Portable prebuilt shim/runtime artifacts per platform (`raco pkg install` with no compiler)
+- [ ] **Phase 5** — Wider widget coverage via specs; `bezel/class` (send-style API); app packaging story
 
 ## License
 
