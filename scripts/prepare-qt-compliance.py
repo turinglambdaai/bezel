@@ -87,7 +87,11 @@ def generate_attributions(source_root: Path, qt_root: Path) -> tuple[int, int]:
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source_file, destination)
 
-        data = json.loads(source_file.read_text(encoding="utf-8"))
+        # Qt's attribution files are consumed by Qt's own scanner and a few of
+        # them contain literal control characters inside long text fields. The
+        # Python decoder's non-strict mode accepts that Qt-authored JSON dialect
+        # without changing the original file that we preserve in the bundle.
+        data = json.loads(source_file.read_text(encoding="utf-8"), strict=False)
         for entry in normalize_entries(data, source_file):
             parts = entry.get("QtParts", ["libs"])
             if isinstance(parts, str):
