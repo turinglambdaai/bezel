@@ -65,9 +65,9 @@
    (when (file-exists? final) (delete-file final))
    (rename-file-or-directory created final)
 
-   ;; Racket package servers conventionally publish a neighboring .CHECKSUM
-   ;; containing the SHA-1 of the archive. Keep that convention even though the
-   ;; GitHub Release also publishes modern SHA-256 checksums for users/tools.
+   ;; Racket treats a neighboring .CHECKSUM file as the exact expected SHA-1
+   ;; string. Do not append a newline: it becomes part of the expected checksum
+   ;; and makes an otherwise valid local archive fail installation.
    (define checksum
      (call-with-input-file final sha1 #:mode 'binary))
    (define checksum-path
@@ -75,8 +75,7 @@
    (call-with-output-file checksum-path
      #:exists 'truncate/replace
      (lambda (out)
-       (display checksum out)
-       (newline out)))
+       (display checksum out)))
 
    (displayln (path->string final))
    (displayln (path->string checksum-path)))
