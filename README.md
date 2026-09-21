@@ -63,7 +63,7 @@ Current prebuilt targets:
 | Windows x86_64 | `bezel-lib-windows-x86_64.zip` | No |
 | macOS Apple Silicon | `bezel-lib-macosx-aarch64.zip` | No |
 
-Every release package is assembled from a platform runtime bundle and then tested on a **fresh runner that installs Racket only**. That runner installs the zip through `raco pkg install`, runs `raco bezel doctor`, constructs real Qt widgets, pumps the event loop, and tears the application down. CI does not set `BEZEL_NATIVE_DIR` for this test, so the package-local runtime path is exercised exactly as an end user sees it.
+Every release package is assembled from a platform runtime bundle and then tested on a **fresh runner without a Qt SDK, compiler, or development packages**. The runner installs Racket and, on Linux, the documented distribution-provided runtime prerequisites. It then installs the zip through `raco pkg install`, runs `raco bezel doctor`, constructs real Qt widgets, pumps the event loop, and tears the application down. CI does not set `BEZEL_NATIVE_DIR` for this test, so the package-local runtime path is exercised exactly as an end user sees it.
 
 The Release also contains raw `bezel-native-*` runtime archives for embedding into other package/application workflows, Racket-compatible `.CHECKSUM` files, a `SHA256SUMS` manifest, a Qt redistribution record, and the **exact SHA-256-verified QtBase base source plus applied official security patches** corresponding to the public runtime policy. Every native runtime contains a `LICENSES/` tree with the Bezel MIT license, Qt license texts, third-party attributions/notices, compliance metadata, and relinking instructions.
 

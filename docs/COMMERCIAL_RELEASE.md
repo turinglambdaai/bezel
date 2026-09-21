@@ -55,17 +55,33 @@ The product must not add terms or technical restrictions that take away LGPL rig
 
 | Runtime key | Build target | Clean smoke coverage | Raw runtime | Self-contained Racket package |
 | --- | --- | --- | --- | --- |
-| `linux-x86_64` | Ubuntu 22.04 x86_64 runner + pinned QtBase | Ubuntu 22.04 + Ubuntu 24.04, Racket only | `bezel-native-linux-x86_64.tar.gz` | `bezel-lib-linux-x86_64.zip` |
+| `linux-x86_64` | Ubuntu 22.04 x86_64 runner + pinned QtBase | Ubuntu 22.04 + Ubuntu 24.04, Racket + distro runtime prerequisites | `bezel-native-linux-x86_64.tar.gz` | `bezel-lib-linux-x86_64.zip` |
 | `windows-x86_64` | current GitHub Windows x64 + source-built patched QtBase | fresh Windows runner, Racket only | `bezel-native-windows-x86_64.zip` | `bezel-lib-windows-x86_64.zip` |
 | `macosx-aarch64` | GitHub macOS 15 Apple Silicon + source-built patched QtBase | fresh Apple Silicon macOS runner, Racket only | `bezel-native-macosx-aarch64.tar.gz` | `bezel-lib-macosx-aarch64.zip` |
 
-"Racket only" means the smoke job does not install a Qt SDK/compiler. Ordinary target-OS runtime prerequisites still apply. On Windows, a compatible Microsoft Visual C++ 2015-2022 runtime is an OS/application prerequisite rather than part of the Bezel public archive.
+The smoke jobs never install a Qt SDK, compiler, or development packages. Linux installs the explicit distribution-provided runtime prerequisites used by the packaged Qt build; Windows and macOS need only Racket on the current fresh runner image. On Windows, a compatible Microsoft Visual C++ 2015-2022 runtime is an OS/application prerequisite rather than part of the Bezel public archive.
 
 ## Runtime dependency boundaries
 
 ### Linux
 
-The public Linux packager copies a dependency only if the resolved library belongs to the selected pinned Qt installation. It rejects unexpected non-Qt shared objects at the package root. Host libraries such as the C/C++ runtime, X11/xcb stack, font/graphics libraries, and other OS dependencies remain system prerequisites instead of silently becoming Bezel redistributables. A diagnostic `SYSTEM-DEPENDENCIES.txt` records resolved host dependencies seen during packaging.
+The public Linux packager copies a dependency only if the resolved library belongs to the selected pinned Qt installation. It rejects unexpected non-Qt shared objects at the package root. Host libraries such as the C/C++ runtime, X11/xcb stack, font/graphics libraries, and other OS dependencies remain system prerequisites instead of silently becoming Bezel redistributables. A diagnostic `SYSTEM-DEPENDENCIES.txt` records resolved host dependencies seen during packaging. The clean Ubuntu 22.04/24.04 tests install the matching runtime packages explicitly and then verify that no Qt SDK or build tool is needed.
+
+For the supported Ubuntu 22.04/24.04 targets, install the tested runtime prerequisites with:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y \
+  libegl1 libgl1 libopengl0 libfontconfig1 libfreetype6 \
+  libice6 libsm6 libx11-6 libx11-xcb1 libxau6 libxdmcp6 \
+  libxcb1 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+  libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+  libxcb-render0 libxcb-shape0 libxcb-shm0 libxcb-sync1 \
+  libxcb-util1 libxcb-xfixes0 libxcb-xkb1 \
+  libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3
+```
+
+This command installs operating-system runtime libraries only. It does not install Qt, a compiler, CMake, or development headers. `SYSTEM-DEPENDENCIES.txt` remains the authoritative per-build diagnostic if the distribution changes its package split.
 
 ### Windows
 

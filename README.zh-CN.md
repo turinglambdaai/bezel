@@ -206,7 +206,7 @@ raco bezel doctor
 - Qt 动态链接和各平台 package dependency boundary 检查；
 - 三平台 native build；
 - 便携 runtime 打包；
-- 干净 runner 上的自包含 Racket package 安装与真 Qt 控件 smoke test；
+- 干净 runner 上的自包含 Racket package 安装与真 Qt 控件 smoke test（Linux 仅额外安装文档列明的发行版运行时前置包，不安装 Qt SDK、编译器或开发包）；
 - 公共二进制旁同时发布经过校验的 QtBase 基础源码和已应用补丁包；
 - Release SHA-256 清单生成。
 
