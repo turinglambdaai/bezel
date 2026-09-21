@@ -41,6 +41,7 @@ fi
 
 FRAMEWORKS="$APP/Contents/Frameworks"
 PLUGINS="$APP/Contents/PlugIns"
+MACOS_DIR="$APP/Contents/MacOS"
 mkdir -p "$FRAMEWORKS" "$PLUGINS/platforms"
 
 SHIM="$(find "$FRAMEWORKS" -maxdepth 1 -type f -name 'libbezel*.dylib' -print -quit)"
@@ -52,7 +53,6 @@ if [[ -z "$SHIM" ]]; then
   fi
   cp -L "$BUILD_SHIM" "$FRAMEWORKS/libbezel.0.dylib"
   SHIM="$FRAMEWORKS/libbezel.0.dylib"
-  install_name_tool -add_rpath '@loader_path' "$SHIM" 2>/dev/null || true
 fi
 
 # Give the Racket loader a stable ABI-major filename even if the deploy tool
@@ -79,6 +79,75 @@ fi
 [[ -e "$PLUGINS/platforms/libqcocoa.dylib" ]] || { echo "Cocoa desktop platform plugin missing from app bundle" >&2; exit 1; }
 [[ -e "$PLUGINS/platforms/libqoffscreen.dylib" ]] || { echo "offscreen platform plugin missing from app bundle" >&2; exit 1; }
 [[ -e "$FRAMEWORKS/libbezel.0.dylib" ]] || { echo "libbezel missing from app bundle" >&2; exit 1; }
+
+# macdeployqt rewrites dependencies for launching the probe as an application,
+# which intentionally uses @executable_path. Bezel is different: Racket dlopen's
+# libbezel from inside the package, so @executable_path would resolve relative
+# to the Racket executable (/Applications/Racket) instead of this runtime.
+# Convert bundled-framework dependencies to @rpath and give each Mach-O class a
+# loader-relative Frameworks rpath. This makes the same bundle valid both when
+# launched as the probe app and when loaded as an SDK from an arbitrary process.
+add_rpath_if_missing() {
+  local binary="$1"
+  local rpath="$2"
+  if ! otool -l "$binary" | grep -Fq "path ${rpath} ("; then
+    install_name_tool -add_rpath "$rpath" "$binary"
+  fi
+}
+
+rewrite_macho() {
+  local binary="$1"
+  local runtime_rpath="$2"
+
+  if ! file "$binary" | grep -q 'Mach-O'; then
+    return 0
+  fi
+
+  while IFS= read -r dep; do
+    case "$dep" in
+      @executable_path/../Frameworks/*)
+        install_name_tool -change "$dep" "@rpath/${dep#@executable_path/../Frameworks/}" "$binary"
+        ;;
+    esac
+  done < <(otool -L "$binary" | tail -n +2 | sed 's/^[[:space:]]*//' | awk '{print $1}')
+
+  add_rpath_if_missing "$binary" "$runtime_rpath"
+}
+
+while IFS= read -r -d '' binary; do
+  if [[ "$binary" == "$FRAMEWORKS"/*.framework/Versions/*/* ]]; then
+    rewrite_macho "$binary" '@loader_path/../../..'
+  else
+    rewrite_macho "$binary" '@loader_path'
+  fi
+done < <(find "$FRAMEWORKS" -type f -print0)
+
+while IFS= read -r -d '' binary; do
+  rewrite_macho "$binary" '@loader_path/../../Frameworks'
+done < <(find "$PLUGINS" -type f -print0)
+
+while IFS= read -r -d '' binary; do
+  rewrite_macho "$binary" '@loader_path/../Frameworks'
+done < <(find "$MACOS_DIR" -type f -print0)
+
+# Fail the package build if any deployed Mach-O still requires the application
+# executable to locate bundled frameworks. That path is invalid for dlopen SDK
+# use and would only be caught later on a clean machine.
+while IFS= read -r -d '' binary; do
+  if file "$binary" | grep -q 'Mach-O'; then
+    if otool -L "$binary" | tail -n +2 | sed 's/^[[:space:]]*//' | awk '{print $1}' | grep -q '^@executable_path/../Frameworks/'; then
+      echo "non-relocatable @executable_path dependency remains in $binary" >&2
+      otool -L "$binary" >&2
+      exit 1
+    fi
+  fi
+done < <(find "$FRAMEWORKS" "$PLUGINS" "$MACOS_DIR" -type f -print0)
+
+# install_name_tool invalidates existing signatures. Ad-hoc sign the SDK bundle
+# so Apple-silicon clean runners can load the modified Mach-O files. Final
+# applications are still expected to apply their own Developer ID signing and
+# notarization policy when they package Bezel.
+codesign --force --deep --sign - --timestamp=none "$APP"
 
 mkdir -p "$DIST_DIR"
 tar -C "$DIST_DIR" -czf "$ARCHIVE" "$ASSET"
