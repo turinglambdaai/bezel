@@ -82,6 +82,7 @@ done < <(find "$ROOT" -mindepth 2 -type f -name '*.so*')
 [[ -e "$ROOT/libQt6Gui.so.6" ]] || { echo "Qt6Gui missing from runtime" >&2; exit 1; }
 [[ -e "$ROOT/libQt6Widgets.so.6" ]] || { echo "Qt6Widgets missing from runtime" >&2; exit 1; }
 [[ -e "$ROOT/platforms/libqoffscreen.so" ]] || { echo "offscreen platform plugin missing" >&2; exit 1; }
+[[ -e "$ROOT/platforms/libqxcb.so" ]] || { echo "X11/xcb desktop platform plugin missing" >&2; exit 1; }
 
 mkdir -p "$DIST_DIR"
 tar -C "$DIST_DIR" -czf "$ARCHIVE" "$ASSET"
