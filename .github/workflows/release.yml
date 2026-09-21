@@ -31,7 +31,7 @@ jobs:
         run: racket scripts/check-version.rkt "$GITHUB_REF_NAME"
 
   native:
-    name: Build native runtime (${{ matrix.asset }})
+    name: Build release package (${{ matrix.platform }})
     needs: metadata
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
@@ -42,15 +42,27 @@ jobs:
           - os: ubuntu-latest
             asset: bezel-native-linux-x86_64
             archive: bezel-native-linux-x86_64.tar.gz
+            platform: linux-x86_64
+            racket-arch: x64
           - os: windows-latest
             asset: bezel-native-windows-x86_64
             archive: bezel-native-windows-x86_64.zip
+            platform: windows-x86_64
+            racket-arch: x64
           - os: macOS-latest
             asset: bezel-native-macosx-aarch64
             archive: bezel-native-macosx-aarch64.tar.gz
+            platform: macosx-aarch64
+            racket-arch: arm64
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Racket for package assembly
+        uses: Bogdanp/setup-racket@v1.11
+        with:
+          version: '8.12'
+          architecture: ${{ matrix.racket-arch }}
 
       - name: Install Qt6 and packaging tools (Linux)
         if: runner.os == 'Linux'
@@ -107,15 +119,21 @@ jobs:
         shell: pwsh
         run: ./scripts/package-native-windows.ps1 -BuildDir bezel-shim/build -DistDir dist
 
-      - name: Upload runtime archive
+      - name: Build self-contained Racket package
+        run: racket scripts/package-racket-runtime.rkt "dist/${{ matrix.asset }}" "${{ matrix.platform }}" dist
+
+      - name: Upload release inputs
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.asset }}
-          path: dist/${{ matrix.archive }}
+          path: |
+            dist/${{ matrix.archive }}
+            dist/bezel-lib-${{ matrix.platform }}.zip
+            dist/bezel-lib-${{ matrix.platform }}.zip.CHECKSUM
           if-no-files-found: error
 
   smoke:
-    name: Verify release runtime (${{ matrix.asset }})
+    name: Verify release package (${{ matrix.platform }})
     needs: native
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
@@ -125,15 +143,15 @@ jobs:
         include:
           - os: ubuntu-latest
             asset: bezel-native-linux-x86_64
-            archive: bezel-native-linux-x86_64.tar.gz
+            platform: linux-x86_64
             racket-arch: x64
           - os: windows-latest
             asset: bezel-native-windows-x86_64
-            archive: bezel-native-windows-x86_64.zip
+            platform: windows-x86_64
             racket-arch: x64
           - os: macOS-latest
             asset: bezel-native-macosx-aarch64
-            archive: bezel-native-macosx-aarch64.tar.gz
+            platform: macosx-aarch64
             racket-arch: arm64
 
     steps:
@@ -145,37 +163,22 @@ jobs:
           version: '8.12'
           architecture: ${{ matrix.racket-arch }}
 
-      - name: Download runtime archive
+      - name: Download packaged artifacts
         uses: actions/download-artifact@v4
         with:
           name: release-${{ matrix.asset }}
           path: dist
 
-      - name: Extract runtime (Linux/macOS)
-        if: runner.os != 'Windows'
-        run: |
-          mkdir -p dist/unpacked
-          tar -xzf "dist/${{ matrix.archive }}" -C dist/unpacked
+      - name: Install self-contained Bezel package
+        run: raco pkg install --auto --no-docs --name bezel-lib "dist/bezel-lib-${{ matrix.platform }}.zip"
 
-      - name: Extract runtime (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: Expand-Archive -Path "dist/${{ matrix.archive }}" -DestinationPath "dist/unpacked" -Force
-
-      - name: Link Racket packages
-        run: |
-          raco pkg install --auto --no-docs --link ./bezel-lib
-          raco pkg install --auto --no-docs --link ./bezel
-
-      - name: Diagnose packaged runtime
+      - name: Diagnose package-local runtime
         env:
-          BEZEL_NATIVE_DIR: ${{ github.workspace }}/dist/unpacked/${{ matrix.asset }}
           QT_QPA_PLATFORM: offscreen
         run: raco bezel doctor
 
       - name: Run packaged runtime smoke test
         env:
-          BEZEL_NATIVE_DIR: ${{ github.workspace }}/dist/unpacked/${{ matrix.asset }}
           QT_QPA_PLATFORM: offscreen
         run: racket scripts/native-smoke.rkt
 
@@ -191,17 +194,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download all verified runtime archives
+      - name: Download all verified release inputs
         uses: actions/download-artifact@v4
         with:
           pattern: release-bezel-native-*
           path: dist
           merge-multiple: true
 
-      - name: Generate checksums
+      - name: Generate SHA-256 checksums
         run: |
           cd dist
-          sha256sum bezel-native-* > SHA256SUMS
+          sha256sum bezel-native-* bezel-lib-*.zip > SHA256SUMS
           cat SHA256SUMS
 
       - name: Publish release
@@ -210,6 +213,8 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" \
             dist/bezel-native-* \
+            dist/bezel-lib-*.zip \
+            dist/bezel-lib-*.zip.CHECKSUM \
             dist/SHA256SUMS \
             --verify-tag \
             --generate-notes \
