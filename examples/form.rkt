@@ -5,6 +5,8 @@
 (require bezel
          racket/string)
 
+(make-application #:name "Bezel Form")
+
 (define name-field (make-line-edit))
 (set-placeholder! name-field "Ada Lovelace")
 (define mail-field (make-line-edit))
