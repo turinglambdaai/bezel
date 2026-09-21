@@ -60,20 +60,32 @@
     (when plugin-root
       (putenv "QT_PLUGIN_PATH" (path->string (simple-form-path plugin-root))))))
 
+(define (remember-load! lib path source-description)
+  (when lib
+    (set! loaded-bezel-library-path
+          (cond
+            [path (path->string (simple-form-path path))]
+            [source-description source-description]
+            [else "<unknown>"])))
+  lib)
+
 (define (try-ffi path-string [path #f] [source-description #f])
   (with-handlers ([exn:fail?
                    (lambda (e)
                      (set! last-try-error (exn-message e))
                      #f)])
     (when path (configure-qt-plugin-path! path))
-    (define lib (ffi-lib path-string))
-    (when lib
-      (set! loaded-bezel-library-path
-            (cond
-              [path (path->string (simple-form-path path))]
-              [source-description source-description]
-              [else "<system dynamic-library search>"])))
-    lib))
+    (remember-load! (ffi-lib path-string) path source-description)))
+
+(define (try-system-ffi)
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (set! last-try-error (exn-message e))
+                     #f)])
+    (remember-load!
+     (ffi-lib '("libbezel" "bezel") '("0" ""))
+     #f
+     "<system dynamic-library search>")))
 
 (define (try-path-candidates candidates)
   (for/or ([p (in-list candidates)])
@@ -116,7 +128,7 @@
       (and (not packaged-runtime-required?)
            (try-path-candidates shim-candidates))
       (and (not packaged-runtime-required?)
-           (try-ffi '("libbezel" "bezel") #f "<system dynamic-library search>"))
+           (try-system-ffi))
       (raise-missing!)))
 
 ;; The Racket bindings and the native shim must agree on the exact ABI.
