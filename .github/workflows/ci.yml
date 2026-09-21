@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  BEZEL_QT_VERSION: '6.8.3'
+
 permissions:
   contents: read
 
@@ -28,15 +31,43 @@ jobs:
       - name: Verify version consistency
         run: racket scripts/check-version.rkt
 
+      - name: Verify fail-closed license policy
+        run: python3 scripts/check-license-policy.py
+
       - name: Regenerate checked-in bindings
         run: racket tools/generator/generate.rkt tools/generator/specs/dial.json
 
       - name: Verify generated bindings are reproducible
         run: git diff --exit-code -- bezel-shim/src/generated bezel-lib/generated
 
+  compliance:
+    name: Verify Qt licenses and source
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate license bundle from exact QtBase source
+        run: python3 scripts/prepare-qt-compliance.py --out-dir dist/compliance
+
+      - name: Verify exact corresponding-source digest
+        run: |
+          echo "56001b905601bb9023d399f3ba780d7fa940f3e4861e496a7c490331f49e0b80  dist/compliance/source/qtbase-everywhere-src-6.8.3.tar.xz" | sha256sum --check -
+          test -s dist/compliance/runtime-licenses/NOTICE.md
+          test -s dist/compliance/runtime-licenses/RELINKING.md
+          test -s dist/compliance/runtime-licenses/Qt/QTBASE-THIRD-PARTY-NOTICES.md
+          test -s dist/compliance/runtime-licenses/Qt/LICENSES/LGPL-3.0-only.txt
+
+      - name: Upload verified runtime licensing material
+        uses: actions/upload-artifact@v4
+        with:
+          name: qt-compliance-runtime
+          path: dist/compliance/runtime-licenses
+          if-no-files-found: error
+
   test:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -52,34 +83,26 @@ jobs:
           version: ${{ matrix.racket-version }}
           architecture: ${{ runner.os == 'macOS' && 'arm64' || 'x64' }}
 
-      - name: Install Qt6 (Linux)
+      - name: Install Linux build prerequisites
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y qt6-base-dev qt6-base-dev-tools libgl1-mesa-dev
-          echo "CMAKE_PREFIX_PATH=/usr" >> $GITHUB_ENV
+          sudo apt-get install -y libgl1-mesa-dev
 
-      - name: Install Qt6 (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install qt cmake
-          echo "CMAKE_PREFIX_PATH=$(brew --prefix qt)" >> $GITHUB_ENV
-
-      - name: Install Qt6 (Windows)
-        if: runner.os == 'Windows'
-        uses: jurplel/install-qt-action@v4
+      - name: Install exact QtBase
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
         with:
-          version: '6.7.*'
+          version: ${{ env.BEZEL_QT_VERSION }}
           archives: qtbase
           cache: true
-
-      - name: Configure shim (Linux/macOS)
-        if: runner.os != 'Windows'
-        run: cmake -S bezel-shim -B bezel-shim/build -DCMAKE_BUILD_TYPE=Release
 
       - name: Set up MSVC (Windows)
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure shim (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: cmake -S bezel-shim -B bezel-shim/build -DCMAKE_BUILD_TYPE=Release
 
       - name: Configure shim (Windows)
         if: runner.os == 'Windows'
@@ -126,14 +149,13 @@ jobs:
 
   native-package:
     name: Native package (${{ matrix.asset }})
+    needs: compliance
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Build the Linux release on the oldest supported glibc/libstdc++
-          # baseline, then smoke it on both the baseline and current Ubuntu.
           - os: ubuntu-22.04
             asset: bezel-native-linux-x86_64
             archive: bezel-native-linux-x86_64.tar.gz
@@ -153,31 +175,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download verified licensing material
+        uses: actions/download-artifact@v4
+        with:
+          name: qt-compliance-runtime
+          path: dist/compliance/runtime-licenses
+
       - name: Install Racket for package assembly
         uses: Bogdanp/setup-racket@v1.11
         with:
           version: '8.12'
           architecture: ${{ matrix.racket-arch }}
 
-      - name: Install Qt6 and packaging tools (Linux)
+      - name: Install Linux packaging prerequisites
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y qt6-base-dev qt6-base-dev-tools libgl1-mesa-dev patchelf
-          echo "CMAKE_PREFIX_PATH=/usr" >> $GITHUB_ENV
+          sudo apt-get install -y libgl1-mesa-dev patchelf
 
-      - name: Install Qt6 and packaging tools (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install qt cmake
-          echo "CMAKE_PREFIX_PATH=$(brew --prefix qt)" >> $GITHUB_ENV
-          echo "$(brew --prefix qt)/bin" >> $GITHUB_PATH
-
-      - name: Install Qt6 (Windows)
-        if: runner.os == 'Windows'
-        uses: jurplel/install-qt-action@v4
+      - name: Install exact QtBase
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
         with:
-          version: '6.7.*'
+          version: ${{ env.BEZEL_QT_VERSION }}
           archives: qtbase
           cache: true
 
@@ -203,16 +222,16 @@ jobs:
 
       - name: Package Linux runtime
         if: runner.os == 'Linux'
-        run: bash scripts/package-native-linux.sh bezel-shim/build dist
+        run: bash scripts/package-native-linux.sh bezel-shim/build dist dist/compliance/runtime-licenses
 
       - name: Package macOS runtime
         if: runner.os == 'macOS'
-        run: bash scripts/package-native-macos.sh bezel-shim/build dist
+        run: bash scripts/package-native-macos.sh bezel-shim/build dist dist/compliance/runtime-licenses
 
       - name: Package Windows runtime
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./scripts/package-native-windows.ps1 -BuildDir bezel-shim/build -DistDir dist
+        run: ./scripts/package-native-windows.ps1 -BuildDir bezel-shim/build -DistDir dist -ComplianceDir dist/compliance/runtime-licenses
 
       - name: Build self-contained Racket package
         run: racket scripts/package-racket-runtime.rkt "dist/${{ matrix.asset }}" "${{ matrix.platform }}" dist
