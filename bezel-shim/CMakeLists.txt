@@ -37,19 +37,23 @@ set_target_properties(bezel PROPERTIES
     PUBLIC_HEADER include/bezel/bezel.h
     MACOSX_RPATH ON)
 
-# macOS: brew Qt frameworks carry @rpath install names; give the
-# build-tree library an rpath into the Qt lib directory so dlopen from
-# the Racket FFI resolves them without install steps.
+# Keep development builds convenient while making installed/repackaged
+# binaries relocatable. Release packaging places Qt beside libbezel on
+# Linux and under the app Frameworks directory on macOS.
 if(APPLE AND Qt6_DIR)
     set(BEZEL_QT_LIB_DIR "${Qt6_DIR}/../..")
     get_filename_component(BEZEL_QT_LIB_DIR "${BEZEL_QT_LIB_DIR}" ABSOLUTE)
     set_target_properties(bezel PROPERTIES
         BUILD_RPATH   "${BEZEL_QT_LIB_DIR}"
-        INSTALL_RPATH "${BEZEL_QT_LIB_DIR};@loader_path")
+        INSTALL_RPATH "@loader_path")
+elseif(UNIX)
+    set_target_properties(bezel PROPERTIES
+        INSTALL_RPATH "$ORIGIN")
 endif()
 
-# Windows: the BEZEL_EXPORT macro in bezel.h covers dllexport; keep the
-# Qt DLLs next to the library for out-of-the-box `racket` runs.
+# Windows development builds keep the core Qt DLLs next to bezel.dll so
+# ordinary checkout runs work without editing PATH. The release packager
+# expands this with the required platform plugins through windeployqt.
 if(WIN32)
     add_custom_command(TARGET bezel POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -57,6 +61,16 @@ if(WIN32)
                 $<TARGET_FILE:Qt6::Gui>
                 $<TARGET_FILE:Qt6::Widgets>
                 $<TARGET_FILE_DIR:bezel>)
+endif()
+
+# A tiny executable gives Qt's deployment tools a normal executable to
+# inspect. It is never shipped as part of the public API; packaging jobs
+# use it to discover the transitive runtime dependency set.
+add_executable(bezel-deploy-probe tools/deploy_probe.cpp)
+target_include_directories(bezel-deploy-probe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(bezel-deploy-probe PRIVATE bezel)
+if(APPLE)
+    set_target_properties(bezel-deploy-probe PROPERTIES MACOSX_BUNDLE TRUE)
 endif()
 
 install(TARGETS bezel
