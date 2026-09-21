@@ -25,6 +25,9 @@ jobs:
         with:
           version: '8.12'
 
+      - name: Verify version consistency
+        run: racket scripts/check-version.rkt
+
       - name: Regenerate checked-in bindings
         run: racket tools/generator/generate.rkt tools/generator/specs/dial.json
 
