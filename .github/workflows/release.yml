@@ -317,6 +317,15 @@ jobs:
           BEZEL_REQUIRE_PACKAGED_RUNTIME: '1'
         run: racket scripts/native-smoke.rkt
 
+      - name: Run full test suite against packaged runtime
+        env:
+          QT_QPA_PLATFORM: offscreen
+          BEZEL_REQUIRE_PACKAGED_RUNTIME: '1'
+          BEZEL_TEST_PROGRESS: '1'
+        run: |
+          raco pkg install --auto --no-docs --link ./bezel-test
+          raco test bezel-test/
+
   publish:
     name: Publish GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')

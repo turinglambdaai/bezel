@@ -74,7 +74,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-15]
+        os: [ubuntu-latest]
         racket-version: ['8.12']
 
     steps:
@@ -92,45 +92,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgl1-mesa-dev qt6-base-dev qt6-base-dev-tools
 
-      - name: Install exact QtBase (Windows/macOS)
-        if: runner.os != 'Linux'
-        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
-        with:
-          version: ${{ env.BEZEL_QT_VERSION }}
-          archives: qtbase
-          cache: true
-
-      - name: Set up MSVC (Windows)
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Configure shim (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Configure shim
         run: cmake -S bezel-shim -B bezel-shim/build -DCMAKE_BUILD_TYPE=Release
 
-      - name: Configure shim (Windows)
-        if: runner.os == 'Windows'
-        run: cmake -S bezel-shim -B bezel-shim\build -DCMAKE_BUILD_TYPE=Release -G Ninja
-
-      - name: Build shim (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Build shim
         run: cmake --build bezel-shim/build -j
-
-      - name: Build shim (Windows)
-        if: runner.os == 'Windows'
-        run: cmake --build bezel-shim\build --config Release -j
 
       - name: Link Racket packages
         run: |
           raco pkg install --auto --no-docs --link ./bezel-lib
           raco pkg install --auto --no-docs --link ./bezel-test
           raco pkg install --auto --no-docs --link ./bezel
-
-      - name: Shim diagnostics (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          ls -la bezel-shim/build/
-          otool -L bezel-shim/build/libbezel*.dylib || true
 
       - name: Run tests
         env:
@@ -376,6 +348,15 @@ jobs:
           QT_QPA_PLATFORM: offscreen
           BEZEL_REQUIRE_PACKAGED_RUNTIME: '1'
         run: racket scripts/native-smoke.rkt
+
+      - name: Run full test suite against packaged runtime
+        env:
+          QT_QPA_PLATFORM: offscreen
+          BEZEL_REQUIRE_PACKAGED_RUNTIME: '1'
+          BEZEL_TEST_PROGRESS: '1'
+        run: |
+          raco pkg install --auto --no-docs --link ./bezel-test
+          raco test bezel-test/
 
   docs:
     runs-on: ubuntu-latest

@@ -46,7 +46,6 @@ cd "$BUILD_DIR"
   -shared \
   -no-icu \
   -no-opengl \
-  -openssl-runtime \
   -qt-zlib \
   -qt-libpng \
   -qt-libjpeg \

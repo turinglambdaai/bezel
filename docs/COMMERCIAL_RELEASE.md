@@ -12,7 +12,7 @@ Bezel's **public GitHub Release workflow is LGPLv3-only** for Qt and deliberatel
 - Linkage: **dynamic**.
 - Exact base-source archive: `qtbase-everywhere-opensource-src-6.8.4.tar.xz`.
 - Exact base-source SHA-256: `532dfbf3fa3cbc68fa37441ea9e81c5009da044eaecda78ffaeafd8bd125532f`.
-- Security patch level: official Qt 6.8 patches reviewed through **2026-09-17**; all three public targets are rebuilt from the same verified source-and-patch set.
+- Security patch level: official Qt 6.8 patches reviewed through **2026-09-22**; all three public targets are rebuilt from the same verified source-and-patch set.
 - Public commercial-Qt publication: **prohibited by policy**.
 - Linux host/system libraries: **not copied into the Bezel public runtime**.
 - Microsoft Visual C++ runtime: **not copied into the Bezel public Windows runtime**.

@@ -19,7 +19,7 @@ Racket 自带的 `racket/gui` 可以完成桌面开发，但要做现代、统�
 - **受检查的 native 边界** —— 加载时验证 shim ABI，尽早发现 Racket 绑定与 native 库版本不匹配。
 - **便携发行包** —— 支持的平台会把 `libbezel`、Qt runtime、Qt plugins 以及强制要求的许可证/重链接材料一起打进 Racket 包；最终用户不需要 Qt SDK、CMake 或 C++ 编译器。
 - **运行环境诊断** —— `raco bezel doctor` 会报告平台、架构、native 搜索路径、环境变量和 ABI 加载状态。
-- **默认拒绝不合规发布** —— 公共二进制统一从 QtBase 6.8.4 公共源码和截至 2026-09-17 已审查的 Qt 6.8 官方安全补丁构建，采用 LGPLv3 动态链接，并由 CI 强制检查对应源码、许可证与依赖边界。
+- **默认拒绝不合规发布** —— 公共二进制统一从 QtBase 6.8.4 公共源码和截至 2026-09-22 已审查的 Qt 6.8 官方安全补丁构建，采用 LGPLv3 动态链接，并由 CI 强制检查对应源码、许可证与依赖边界。
 
 <p align="center"><img src="docs/showcase.png" alt="Bezel Showcase —— Racket 写就的真 Qt 界面" width="720"></p>
 

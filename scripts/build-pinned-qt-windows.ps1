@@ -43,7 +43,6 @@ try {
     -release `
     -shared `
     -no-icu `
-    -openssl-runtime `
     -opengl dynamic `
     -qt-zlib `
     -qt-libpng `

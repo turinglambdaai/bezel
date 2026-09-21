@@ -20,7 +20,7 @@ Commercial-hardening release focused on correctness, reproducibility, portable n
 - Linux relocatable runtime packaging with Qt libraries/plugins and explicit `$ORIGIN` RPATHs.
 - Clean-runner runtime smoke tests on Linux x86_64, Windows x86_64, and macOS arm64. These jobs install Racket only and exercise real Qt widgets from the packaged runtime.
 - Tag-driven GitHub Release workflow that rebuilds, clean-smoke-tests, checksums, and publishes verified native runtime archives.
-- Fail-closed public Qt redistribution policy pinned to QtBase 6.8.4 public source plus reviewed official Qt 6.8 security patches through 2026-09-17, LGPLv3 dynamic linking, and exact source/patch SHA-256 values.
+- Fail-closed public Qt redistribution policy pinned to QtBase 6.8.4 public source plus reviewed official Qt 6.8 security patches through 2026-09-22, LGPLv3 dynamic linking, and exact source/patch SHA-256 values.
 - Per-runtime `LICENSES/` bundle with Qt/LGPL license texts, Bezel MIT text, third-party attribution metadata/notices, relinking instructions, and machine-readable compliance metadata.
 - Verified corresponding-source generation: tagged public releases publish the exact QtBase base source and applied security-patch bundle beside binaries rather than relying on upstream URLs alone.
 - `scripts/check-license-policy.py` to prevent wildcard Qt versions, accidental public commercial-Qt claims, or reintroduction of unrelated bundled runtime libraries.

@@ -6,7 +6,7 @@ Bezel's public CI can build portable runtime bundles containing Qt shared librar
 
 The public GitHub Actions release path is intentionally narrow and auditable:
 
-- Qt is pinned to the public **QtBase 6.8.4** source plus reviewed official Qt 6.8 security patches through **2026-09-17**.
+- Qt is pinned to the public **QtBase 6.8.4** source plus reviewed official Qt 6.8 security patches through **2026-09-22**.
 - Bezel and Qt are dynamically linked.
 - Public prebuilt binaries use the **LGPLv3** path only.
 - Every target is rebuilt from the same exact public source-and-patch set; public online Qt binaries are not release inputs.

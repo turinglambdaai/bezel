@@ -19,7 +19,7 @@ You get:
 - **Checked native boundary** — the Racket layer validates the shim ABI before exposing the API.
 - **Portable release packages** — supported release targets embed `libbezel`, Qt runtime libraries, required Qt plugins, and mandatory license/relinking material inside the Racket package; end users do not need a Qt SDK, CMake, or a C++ compiler.
 - **Release diagnostics** — `raco bezel doctor` reports platform, architecture, runtime candidates, environment overrides, and ABI load status.
-- **Fail-closed public redistribution** — public binaries are built from QtBase 6.8.4 public source plus the reviewed official Qt 6.8 security patches through 2026-09-17, use LGPLv3 dynamic linking, and carry verified corresponding source.
+- **Fail-closed public redistribution** — public binaries are built from QtBase 6.8.4 public source plus the reviewed official Qt 6.8 security patches through 2026-09-22, use LGPLv3 dynamic linking, and carry verified corresponding source.
 
 <p align="center"><img src="docs/showcase.png" alt="Bezel Qt showcase rendered from Racket" width="720"></p>
 

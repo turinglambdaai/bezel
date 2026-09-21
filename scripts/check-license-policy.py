@@ -11,7 +11,12 @@ import sys
 import urllib.request
 
 REQUIRED_QT_VERSION = "6.8.4"
+REQUIRED_QTBASE_URL = (
+    "https://download.qt.io/official_releases/qt/6.8/6.8.4/submodules/"
+    "qtbase-everywhere-opensource-src-6.8.4.tar.xz"
+)
 REQUIRED_QTBASE_SHA256 = "532dfbf3fa3cbc68fa37441ea9e81c5009da044eaecda78ffaeafd8bd125532f"
+REQUIRED_SECURITY_REVIEWED_THROUGH = "2026-09-22"
 REQUIRED_BUILD_PROFILE = "source-shared-no-icu-official-security-patches"
 REQUIRED_LINUX_PROFILE = (
     "source-shared-no-icu-host-deps-external-official-security-patches"
@@ -44,11 +49,13 @@ def main() -> None:
     )
     if policy.get("source_archive") != expected_archive:
         fail(f"unexpected QtBase source archive: {policy.get('source_archive')!r}")
-    source_url = str(policy.get("source_url", ""))
-    if not source_url.startswith("https://download.qt.io/") or not source_url.endswith(
-        "/" + expected_archive
-    ):
-        fail("QtBase source must come from download.qt.io and match the pinned archive")
+    if policy.get("source_url") != REQUIRED_QTBASE_URL:
+        fail("QtBase source URL does not match the exact reviewed release source")
+    if policy.get("security_reviewed_through") != REQUIRED_SECURITY_REVIEWED_THROUGH:
+        fail(
+            "Qt security review date must be pinned to "
+            f"{REQUIRED_SECURITY_REVIEWED_THROUGH}"
+        )
     if policy.get("public_release_license_mode") != "lgpl":
         fail("public binary release mode must be LGPL")
     if policy.get("public_release_linkage") != "dynamic":
