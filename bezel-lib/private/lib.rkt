@@ -77,15 +77,24 @@
     (when path (configure-qt-plugin-path! path))
     (remember-load! (ffi-lib path-string) path source-description)))
 
-(define (try-system-ffi)
+(define (try-system-name name version)
   (with-handlers ([exn:fail?
                    (lambda (e)
                      (set! last-try-error (exn-message e))
                      #f)])
     (remember-load!
-     (ffi-lib '("libbezel" "bezel") '("0" ""))
+     (if version (ffi-lib name version) (ffi-lib name))
      #f
-     "<system dynamic-library search>")))
+     (format "<system dynamic-library search: ~a>" name))))
+
+(define (try-system-ffi)
+  ;; `ffi-lib` takes one library name at a time. Trying a list as the first
+  ;; argument is a contract error on supported Racket releases, so enumerate
+  ;; the versioned and unversioned spellings explicitly.
+  (or (try-system-name "libbezel" "0")
+      (try-system-name "libbezel" #f)
+      (try-system-name "bezel" "0")
+      (try-system-name "bezel" #f)))
 
 (define (try-path-candidates candidates)
   (for/or ([p (in-list candidates)])
