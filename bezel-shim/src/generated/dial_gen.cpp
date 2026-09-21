@@ -24,7 +24,9 @@ extern "C" {
 
 BEZEL_EXPORT bezel_handle dial_new(bezel_handle in0) {
     return on_gui([=]() -> bezel_handle {
-        return register_object(new QDial(resolve_parent(in0, "dial_new")));
+        QWidget* parent0 = resolve_parent(in0, "dial_new");
+        if (in0 && !parent0) return nullptr;
+        return register_object(new QDial(parent0));
     });
 }
 
