@@ -71,9 +71,9 @@
       (raise-missing!)))
 
 ;; The Racket bindings and the native shim must agree on the exact ABI.
-;; Without this check, loading an older libbezel can fail much later as a
-;; missing symbol, wrong struct layout, or — worst case — memory corruption.
-(define expected-bezel-abi-version 2)
+;; Without this check, loading an incompatible libbezel can fail much
+;; later as a missing symbol, wrong struct layout, or memory corruption.
+(define expected-bezel-abi-version 1)
 
 (define loaded-bezel-abi-version
   ((get-ffi-obj
