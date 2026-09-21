@@ -3,6 +3,7 @@
 (require file/sha1
          racket/file
          racket/path
+         racket/runtime-path
          racket/system)
 
 (define args (vector->list (current-command-line-arguments)))
