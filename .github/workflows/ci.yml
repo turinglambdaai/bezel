@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  BEZEL_QT_VERSION: '6.8.4'
+
 permissions:
   contents: read
 
@@ -28,19 +31,50 @@ jobs:
       - name: Verify version consistency
         run: racket scripts/check-version.rkt
 
+      - name: Verify fail-closed license policy
+        run: python3 scripts/check-license-policy.py
+
       - name: Regenerate checked-in bindings
         run: racket tools/generator/generate.rkt tools/generator/specs/dial.json
 
       - name: Verify generated bindings are reproducible
         run: git diff --exit-code -- bezel-shim/src/generated bezel-lib/generated
 
+  compliance:
+    name: Verify Qt licenses and source
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate license bundle from exact QtBase source
+        run: python3 scripts/prepare-qt-compliance.py --out-dir dist/compliance
+
+      - name: Verify exact corresponding-source digest
+        run: |
+          echo "532dfbf3fa3cbc68fa37441ea9e81c5009da044eaecda78ffaeafd8bd125532f  dist/compliance/source/qtbase-everywhere-opensource-src-6.8.4.tar.xz" | sha256sum --check -
+          echo "86c063884e0a274075f29d1aa452001cef7d7dfcee21b21eb9a7165679b4052a  dist/compliance/source/patches/CVE-2026-19248-qtbase-6.8.diff" | sha256sum --check -
+          echo "19683125f596b5278ff38461951ab778b1cc24a59065cc0721ff1a52e625f0c8  dist/compliance/source/patches/CVE-2026-76151-qtbase-6.8.diff" | sha256sum --check -
+          echo "8a4f44fa40d4b46d0d2582652d84598f2ac55fcd4a53ecebc23ae5e381a3252a  dist/compliance/source/patches/CVE-2026-78253-qtbase-6.8.diff" | sha256sum --check -
+          test -s dist/compliance/runtime-licenses/NOTICE.md
+          test -s dist/compliance/runtime-licenses/RELINKING.md
+          test -s dist/compliance/runtime-licenses/Qt/QTBASE-THIRD-PARTY-NOTICES.md
+          test -s dist/compliance/runtime-licenses/Qt/LICENSES/LGPL-3.0-only.txt
+
+      - name: Upload verified source and licensing material
+        uses: actions/upload-artifact@v4
+        with:
+          name: qt-compliance
+          path: dist/compliance
+          if-no-files-found: error
+
   test:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macOS-latest]
+        os: [ubuntu-latest]
         racket-version: ['8.12']
 
     steps:
@@ -52,58 +86,23 @@ jobs:
           version: ${{ matrix.racket-version }}
           architecture: ${{ runner.os == 'macOS' && 'arm64' || 'x64' }}
 
-      - name: Install Qt6 (Linux)
+      - name: Install Linux test Qt
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y qt6-base-dev qt6-base-dev-tools libgl1-mesa-dev
-          echo "CMAKE_PREFIX_PATH=/usr" >> $GITHUB_ENV
+          sudo apt-get install -y libgl1-mesa-dev qt6-base-dev qt6-base-dev-tools
 
-      - name: Install Qt6 (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install qt cmake
-          echo "CMAKE_PREFIX_PATH=$(brew --prefix qt)" >> $GITHUB_ENV
-
-      - name: Install Qt6 (Windows)
-        if: runner.os == 'Windows'
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: '6.7.*'
-          archives: qtbase
-          cache: true
-
-      - name: Configure shim (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Configure shim
         run: cmake -S bezel-shim -B bezel-shim/build -DCMAKE_BUILD_TYPE=Release
 
-      - name: Set up MSVC (Windows)
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Configure shim (Windows)
-        if: runner.os == 'Windows'
-        run: cmake -S bezel-shim -B bezel-shim\build -DCMAKE_BUILD_TYPE=Release -G Ninja
-
-      - name: Build shim (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Build shim
         run: cmake --build bezel-shim/build -j
-
-      - name: Build shim (Windows)
-        if: runner.os == 'Windows'
-        run: cmake --build bezel-shim\build --config Release -j
 
       - name: Link Racket packages
         run: |
           raco pkg install --auto --no-docs --link ./bezel-lib
           raco pkg install --auto --no-docs --link ./bezel-test
           raco pkg install --auto --no-docs --link ./bezel
-
-      - name: Shim diagnostics (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          ls -la bezel-shim/build/
-          otool -L bezel-shim/build/libbezel*.dylib || true
 
       - name: Run tests
         env:
@@ -126,14 +125,13 @@ jobs:
 
   native-package:
     name: Native package (${{ matrix.asset }})
+    needs: compliance
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Build the Linux release on the oldest supported glibc/libstdc++
-          # baseline, then smoke it on both the baseline and current Ubuntu.
           - os: ubuntu-22.04
             asset: bezel-native-linux-x86_64
             archive: bezel-native-linux-x86_64.tar.gz
@@ -144,7 +142,7 @@ jobs:
             archive: bezel-native-windows-x86_64.zip
             platform: windows-x86_64
             racket-arch: x64
-          - os: macOS-latest
+          - os: macos-15
             asset: bezel-native-macosx-aarch64
             archive: bezel-native-macosx-aarch64.tar.gz
             platform: macosx-aarch64
@@ -153,37 +151,101 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download verified source and licensing material
+        uses: actions/download-artifact@v4
+        with:
+          name: qt-compliance
+          path: dist/compliance
+
+      - name: Set up Python for verified source preparation
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
       - name: Install Racket for package assembly
         uses: Bogdanp/setup-racket@v1.11
         with:
           version: '8.12'
           architecture: ${{ matrix.racket-arch }}
 
-      - name: Install Qt6 and packaging tools (Linux)
+      - name: Install Linux source-build prerequisites
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y qt6-base-dev qt6-base-dev-tools libgl1-mesa-dev patchelf
-          echo "CMAKE_PREFIX_PATH=/usr" >> $GITHUB_ENV
+          sudo apt-get install -y \
+            build-essential cmake ninja-build python3 curl patchelf \
+            libgl1-mesa-dev libegl1-mesa-dev libfontconfig1-dev libfreetype6-dev \
+            libx11-dev libx11-xcb-dev libxcb1-dev libxcb-cursor-dev \
+            libxcb-glx0-dev libxcb-icccm4-dev libxcb-image0-dev \
+            libxcb-keysyms1-dev libxcb-randr0-dev libxcb-render-util0-dev \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-shm0-dev \
+            libxcb-sync-dev libxcb-util-dev libxcb-xfixes0-dev \
+            libxcb-xinerama0-dev libxcb-xkb-dev libxkbcommon-dev \
+            libxkbcommon-x11-dev libdbus-1-dev
 
-      - name: Install Qt6 and packaging tools (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install qt cmake
-          echo "CMAKE_PREFIX_PATH=$(brew --prefix qt)" >> $GITHUB_ENV
-          echo "$(brew --prefix qt)/bin" >> $GITHUB_PATH
-
-      - name: Install Qt6 (Windows)
-        if: runner.os == 'Windows'
-        uses: jurplel/install-qt-action@v4
+      - name: Restore pinned Linux Qt build cache
+        if: runner.os == 'Linux'
+        uses: actions/cache@v4
         with:
-          version: '6.7.*'
-          archives: qtbase
-          cache: true
+          path: .qt-linux/6.8.4
+          key: bezel-qt-linux-6.8.4-noicu-sec-532dfbf3-86c06388-19683125-8a4f44fa-v1
+
+      - name: Build exact QtBase from verified source (Linux)
+        if: runner.os == 'Linux'
+        run: bash scripts/build-pinned-qt-linux.sh "$GITHUB_WORKSPACE/.qt-linux/6.8.4" "$GITHUB_WORKSPACE/.qt-linux-build" "$GITHUB_WORKSPACE/dist/compliance/source/qtbase-everywhere-opensource-src-6.8.4.tar.xz" "$GITHUB_WORKSPACE/dist/compliance/source/patches"
+
+      - name: Export pinned Linux Qt
+        if: runner.os == 'Linux'
+        run: |
+          echo "$GITHUB_WORKSPACE/.qt-linux/6.8.4/bin" >> "$GITHUB_PATH"
+          echo "CMAKE_PREFIX_PATH=$GITHUB_WORKSPACE/.qt-linux/6.8.4" >> "$GITHUB_ENV"
+          echo "QT_ROOT_DIR=$GITHUB_WORKSPACE/.qt-linux/6.8.4" >> "$GITHUB_ENV"
+          echo "QT_PLUGIN_PATH=$GITHUB_WORKSPACE/.qt-linux/6.8.4/plugins" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/.qt-linux/6.8.4/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+
+      - name: Restore pinned Windows Qt build cache
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: .qt-windows/6.8.4
+          key: bezel-qt-windows-6.8.4-noicu-sec-532dfbf3-86c06388-19683125-8a4f44fa-v1
+
+      - name: Restore pinned macOS Qt build cache
+        if: runner.os == 'macOS'
+        uses: actions/cache@v4
+        with:
+          path: .qt-macos/6.8.4
+          key: bezel-qt-macos-6.8.4-noicu-noopengl-sec-532dfbf3-86c06388-19683125-8a4f44fa-v1
 
       - name: Set up MSVC (Windows)
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build exact patched QtBase source (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/build-pinned-qt-windows.ps1 -Prefix .qt-windows/6.8.4 -SourceArchive dist/compliance/source/qtbase-everywhere-opensource-src-6.8.4.tar.xz -PatchDir dist/compliance/source/patches
+
+      - name: Export pinned Windows Qt
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "$env:GITHUB_WORKSPACE\.qt-windows\6.8.4\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "CMAKE_PREFIX_PATH=$env:GITHUB_WORKSPACE\.qt-windows\6.8.4" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "QT_ROOT_DIR=$env:GITHUB_WORKSPACE\.qt-windows\6.8.4" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "QT_PLUGIN_PATH=$env:GITHUB_WORKSPACE\.qt-windows\6.8.4\plugins" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build exact patched QtBase source (macOS)
+        if: runner.os == 'macOS'
+        run: bash scripts/build-pinned-qt-macos.sh "$GITHUB_WORKSPACE/.qt-macos/6.8.4" "$GITHUB_WORKSPACE/.qt-macos-build" "$GITHUB_WORKSPACE/dist/compliance/source/qtbase-everywhere-opensource-src-6.8.4.tar.xz" "$GITHUB_WORKSPACE/dist/compliance/source/patches"
+
+      - name: Export pinned macOS Qt
+        if: runner.os == 'macOS'
+        run: |
+          echo "$GITHUB_WORKSPACE/.qt-macos/6.8.4/bin" >> "$GITHUB_PATH"
+          echo "CMAKE_PREFIX_PATH=$GITHUB_WORKSPACE/.qt-macos/6.8.4" >> "$GITHUB_ENV"
+          echo "QT_ROOT_DIR=$GITHUB_WORKSPACE/.qt-macos/6.8.4" >> "$GITHUB_ENV"
+          echo "QT_PLUGIN_PATH=$GITHUB_WORKSPACE/.qt-macos/6.8.4/plugins" >> "$GITHUB_ENV"
 
       - name: Configure shim (Linux/macOS)
         if: runner.os != 'Windows'
@@ -203,16 +265,16 @@ jobs:
 
       - name: Package Linux runtime
         if: runner.os == 'Linux'
-        run: bash scripts/package-native-linux.sh bezel-shim/build dist
+        run: bash scripts/package-native-linux.sh bezel-shim/build dist dist/compliance/runtime-licenses
 
       - name: Package macOS runtime
         if: runner.os == 'macOS'
-        run: bash scripts/package-native-macos.sh bezel-shim/build dist
+        run: bash scripts/package-native-macos.sh bezel-shim/build dist dist/compliance/runtime-licenses
 
       - name: Package Windows runtime
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./scripts/package-native-windows.ps1 -BuildDir bezel-shim/build -DistDir dist
+        run: ./scripts/package-native-windows.ps1 -BuildDir bezel-shim/build -DistDir dist -ComplianceDir dist/compliance/runtime-licenses
 
       - name: Build self-contained Racket package
         run: racket scripts/package-racket-runtime.rkt "dist/${{ matrix.asset }}" "${{ matrix.platform }}" dist
@@ -251,7 +313,7 @@ jobs:
             asset: bezel-native-windows-x86_64
             platform: windows-x86_64
             racket-arch: x64
-          - os: macOS-latest
+          - os: macos-15
             target: macosx-aarch64
             asset: bezel-native-macosx-aarch64
             platform: macosx-aarch64
@@ -260,11 +322,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Racket only
+      - name: Install Racket on fresh runner
         uses: Bogdanp/setup-racket@v1.11
         with:
           version: '8.12'
           architecture: ${{ matrix.racket-arch }}
+
+      - name: Install documented Linux runtime prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libegl1 libgl1 libopengl0 libfontconfig1 libfreetype6 \
+            libice6 libsm6 libx11-6 libx11-xcb1 libxau6 libxdmcp6 \
+            libxcb1 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+            libxcb-render0 libxcb-shape0 libxcb-shm0 libxcb-sync1 \
+            libxcb-util1 libxcb-xfixes0 libxcb-xkb1 \
+            libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3
 
       - name: Download packaged artifacts
         uses: actions/download-artifact@v4
@@ -286,6 +361,15 @@ jobs:
           QT_QPA_PLATFORM: offscreen
           BEZEL_REQUIRE_PACKAGED_RUNTIME: '1'
         run: racket scripts/native-smoke.rkt
+
+      - name: Run full test suite against packaged runtime
+        env:
+          QT_QPA_PLATFORM: offscreen
+          BEZEL_REQUIRE_PACKAGED_RUNTIME: '1'
+          BEZEL_TEST_PROGRESS: '1'
+        run: |
+          raco pkg install --auto --no-docs --link ./bezel-test
+          raco test bezel-test/
 
   docs:
     runs-on: ubuntu-latest

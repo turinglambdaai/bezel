@@ -1,122 +1,157 @@
 # Commercial release guide
 
-Bezel itself is MIT licensed. A product that redistributes Bezel's prebuilt native runtime also redistributes Qt libraries, plugins, and on Linux a selected runtime dependency closure, so the product owner must choose and comply with the applicable licenses for that distribution.
+Bezel itself is MIT licensed. Public prebuilt native runtimes also redistribute Qt libraries/plugins and therefore carry separate Qt/LGPL and Qt third-party obligations. Bezel's release engineering is designed to make those obligations visible, reproducible, and fail-closed rather than relying on a README promise.
 
-This document is an engineering release checklist, not legal advice. Verify the licensing model for the exact Qt version/modules and third-party libraries used by your product and obtain legal review when shipping a commercial product.
+This is an engineering compliance guide, not legal advice. The final product, installer, device, store/channel, contractual terms, signing/DRM model, and any libraries added by the product must still be reviewed for their own distribution requirements.
+
+## Public binary licensing model
+
+Bezel's **public GitHub Release workflow is LGPLv3-only** for Qt and deliberately uses a narrow, pinned configuration:
+
+- QtBase public-source baseline: **6.8.4**.
+- Linkage: **dynamic**.
+- Exact base-source archive: `qtbase-everywhere-opensource-src-6.8.4.tar.xz`.
+- Exact base-source SHA-256: `532dfbf3fa3cbc68fa37441ea9e81c5009da044eaecda78ffaeafd8bd125532f`.
+- Security patch level: official Qt 6.8 patches reviewed through **2026-09-22**; all three public targets are rebuilt from the same verified source-and-patch set.
+- Public commercial-Qt publication: **prohibited by policy**.
+- Linux host/system libraries: **not copied into the Bezel public runtime**.
+- Microsoft Visual C++ runtime: **not copied into the Bezel public Windows runtime**.
+
+The policy is machine-readable in `release/qt-runtime-policy.json` and checked by `scripts/check-license-policy.py` on every CI/release run.
+
+A commercial Qt license remains a valid choice for a proprietary product. However, that build must use a **separate private release pipeline** that uses the Qt distribution covered by the commercial agreement and can establish its provenance/entitlement. The public workflow must never convert public/open-source Qt artifacts into a build merely labelled "commercial".
+
+## What every public runtime contains
+
+The native runtime root contains a `LICENSES/` directory with at least:
+
+- `NOTICE.md` — redistribution summary;
+- `BEZEL-MIT.txt` — Bezel's license;
+- `RELINKING.md` — practical Qt replacement/relinking instructions;
+- `COMPLIANCE.json` — machine-readable compliance summary;
+- `QT-RUNTIME-POLICY.json` — copied release policy;
+- `Qt/LICENSES/` — license texts from the exact pinned QtBase source archive;
+- `Qt/QT-SOURCE.txt` — exact source/version/hash record;
+- `Qt/QTBASE-THIRD-PARTY-NOTICES.md` — generated attribution inventory;
+- copied Qt `qt_attribution.json` metadata and referenced/nearby third-party license files.
+
+A runtime missing this material is rejected by `scripts/verify-release-layout.rkt` before the self-contained Racket package can be created.
+
+## Corresponding source
+
+`scripts/prepare-qt-compliance.py` downloads the exact QtBase source archive and every applied official Qt 6.8 security patch from `download.qt.io`, verifies every pinned SHA-256, and generates the licensing bundle from that verified source tree. It does not trust whatever Qt installation happened to exist on the CI machine for license text, attribution generation, or release binaries.
+
+For a tagged public release, the same verified QtBase base archive, patch bundle, and `QT-SOURCE-MANIFEST.json` are published as GitHub Release assets beside the binaries. The release also includes `SHA256SUMS`, covering the native archives, self-contained Racket packages, base source, patch bundle, and source manifest.
+
+Publishing the source with the release is intentionally stronger and easier to audit than relying only on an upstream URL. A downstream redistributor still needs to make the corresponding source available under **its own** control and satisfy its own obligations to recipients.
+
+## Relinking and replacement
+
+The public runtime uses shared Qt libraries/frameworks. Its layout is deliberately replaceable; detailed platform instructions are in `LGPL_RELINKING.md`.
+
+The product must not add terms or technical restrictions that take away LGPL rights. In particular, evaluate whether a store, DRM system, locked device, code-signing policy, or installer prevents the recipient from replacing/relinking Qt and running the modified result where the license requires that ability.
 
 ## Supported release targets
 
-The automated release pipeline currently builds and smoke-tests these targets:
-
-| Runtime key | Build baseline | Clean smoke coverage | Raw runtime | Self-contained Racket package |
+| Runtime key | Build target | Clean smoke coverage | Raw runtime | Self-contained Racket package |
 | --- | --- | --- | --- | --- |
-| `linux-x86_64` | Ubuntu 22.04 x86_64 | Ubuntu 22.04 + Ubuntu 24.04, Racket only | `bezel-native-linux-x86_64.tar.gz` | `bezel-lib-linux-x86_64.zip` |
-| `windows-x86_64` | current GitHub Windows x64 | fresh Windows runner, Racket only | `bezel-native-windows-x86_64.zip` | `bezel-lib-windows-x86_64.zip` |
-| `macosx-aarch64` | current GitHub Apple Silicon macOS | fresh Apple Silicon macOS runner, Racket only | `bezel-native-macosx-aarch64.tar.gz` | `bezel-lib-macosx-aarch64.zip` |
+| `linux-x86_64` | Ubuntu 22.04 x86_64 runner + pinned QtBase | Ubuntu 22.04 + Ubuntu 24.04, Racket + distro runtime prerequisites | `bezel-native-linux-x86_64.tar.gz` | `bezel-lib-linux-x86_64.zip` |
+| `windows-x86_64` | current GitHub Windows x64 + source-built patched QtBase | fresh Windows runner, Racket only | `bezel-native-windows-x86_64.zip` | `bezel-lib-windows-x86_64.zip` |
+| `macosx-aarch64` | GitHub macOS 15 Apple Silicon + source-built patched QtBase | fresh Apple Silicon macOS runner, Racket only | `bezel-native-macosx-aarch64.tar.gz` | `bezel-lib-macosx-aarch64.zip` |
 
-Linux release binaries are deliberately built on Ubuntu 22.04 rather than `ubuntu-latest` so their glibc/libstdc++ baseline does not drift forward whenever GitHub changes its default runner. The Linux packager bundles the non-baseline ELF dependency closure required by the selected Qt runtime and plugins (for example ICU or image-codec dependencies) while leaving glibc and the C/C++ runtime to the supported OS baseline. The package is then smoke-tested on both Ubuntu 22.04 and 24.04.
+The smoke jobs never install a Qt SDK, compiler, or development packages. Linux installs the explicit distribution-provided runtime prerequisites used by the packaged Qt build; Windows and macOS need only Racket on the current fresh runner image. On Windows, a compatible Microsoft Visual C++ 2015-2022 runtime is an OS/application prerequisite rather than part of the Bezel public archive.
 
-A target is not considered supported merely because the C++ shim compiles. The release pipeline must also pass a second clean-runner smoke test that installs **Racket only**, installs the self-contained archive through `raco pkg install`, runs `raco bezel doctor`, creates real Qt widgets, pumps the event loop, and cleans up successfully. Clean smoke enables `BEZEL_REQUIRE_PACKAGED_RUNTIME=1`, so a passing run proves that Bezel loaded the package-local runtime instead of accidentally reusing a source build or system `libbezel`.
+## Runtime dependency boundaries
+
+### Linux
+
+The public Linux packager copies a dependency only if the resolved library belongs to the selected pinned Qt installation. It rejects unexpected non-Qt shared objects at the package root. Host libraries such as the C/C++ runtime, X11/xcb stack, font/graphics libraries, and other OS dependencies remain system prerequisites instead of silently becoming Bezel redistributables. A diagnostic `SYSTEM-DEPENDENCIES.txt` records resolved host dependencies seen during packaging. The clean Ubuntu 22.04/24.04 tests install the matching runtime packages explicitly and then verify that no Qt SDK or build tool is needed.
+
+For the supported Ubuntu 22.04/24.04 targets, install the tested runtime prerequisites with:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y \
+  libegl1 libgl1 libopengl0 libfontconfig1 libfreetype6 \
+  libice6 libsm6 libx11-6 libx11-xcb1 libxau6 libxdmcp6 \
+  libxcb1 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+  libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+  libxcb-render0 libxcb-shape0 libxcb-shm0 libxcb-sync1 \
+  libxcb-util1 libxcb-xfixes0 libxcb-xkb1 \
+  libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3
+```
+
+This command installs operating-system runtime libraries only. It does not install Qt, a compiler, CMake, or development headers. `SYSTEM-DEPENDENCIES.txt` remains the authoritative per-build diagnostic if the distribution changes its package split.
+
+### Windows
+
+`windeployqt` is run without compiler-runtime, software OpenGL, system D3D compiler, or system DXC redistribution. The packager rejects MSVC CRT, D3D compiler, DXC, software-OpenGL DLLs, and unexpected non-Qt top-level DLLs. A compatible VC++ runtime is documented as a prerequisite.
+
+### macOS
+
+The app-bundle staging area is restricted to Bezel plus Qt frameworks/plugins. The packager rejects unexpected non-Qt frameworks/dylibs, rewrites Qt paths for relocatable `dlopen` use, and ad-hoc signs the modified SDK bundle after `install_name_tool`. A final application must apply its own signing/notarization while preserving the licensing rights relevant to its chosen Qt model.
 
 ## Release flow
 
-1. Merge only after the normal CI matrix and all clean package smoke jobs pass.
-2. Update the Bezel version consistently in the Racket packages, CMake project, and changelog.
-3. Create an annotated or lightweight `vX.Y.Z` tag from the intended main-branch commit.
-4. The `Release` workflow validates that the tag exactly matches repository version metadata.
-5. It verifies the explicit Qt redistribution acknowledgement configured for the repository before tagged publication is allowed.
-6. It rebuilds all native runtimes from the tag.
-7. It creates a platform-specific `bezel-lib-<platform>.zip` containing the Racket bindings plus that runtime under `native/<os>-<arch>/`.
-8. Every self-contained package is re-tested on a fresh runner without installing Qt, CMake, or a C++ compiler; Linux is tested on both the baseline and a newer LTS runner.
-9. Only after all smoke jobs pass does the workflow create the GitHub Release.
-10. The release contains the raw runtimes, self-contained Racket packages, Racket-compatible `.CHECKSUM` files, a `SHA256SUMS` manifest, and a redistribution-mode record.
-11. Before promoting a release to production customers, perform product-level signing/notarization and licensing checks appropriate to the final application.
+1. Merge only after the normal CI matrix, compliance generation, native packaging, and clean package smoke jobs pass.
+2. Update Bezel version metadata/changelog consistently.
+3. Create `vX.Y.Z` only from the intended `main` commit.
+4. The Release workflow validates tag/version consistency and `scripts/check-license-policy.py`.
+5. Tagged publication requires `BEZEL_QT_LICENSE_MODE=lgpl` and `BEZEL_QT_REDISTRIBUTION_ACK=approved-lgpl-v3`.
+6. The exact QtBase base source and official security patches are downloaded, SHA-256 verified, and converted into source/licensing material.
+7. Each native package is rebuilt from that same patched source and embeds the licensing material.
+8. Each self-contained package is tested on a fresh runner with `BEZEL_REQUIRE_PACKAGED_RUNTIME=1` so it cannot fall back to a developer/source Qt build.
+9. Only after all smoke tests pass does the workflow publish the binaries, exact QtBase base source, patch bundle/source manifest, redistribution record, and SHA-256 manifest.
+10. The final customer-facing application/installer still performs its own signing, channel, dependency, and legal review.
 
-The release workflow can also be started manually. Manual runs build and test artifacts but deliberately do not create a GitHub Release because there is no immutable version tag to publish.
+Manual workflow-dispatch builds/test artifacts but does not create a GitHub Release.
 
 ## End-user installation contract
-
-On a supported target, the user should need only Racket plus the normal operating-system baseline documented above:
 
 ```text
 raco pkg install --auto --name bezel-lib /path/to/bezel-lib-<platform>.zip
 raco bezel doctor
 ```
 
-The explicit package name keeps the installed package identity stable (`bezel-lib`) even though GitHub release asset names include the target platform.
-
-The archive's `info.rkt` still carries the semantic Bezel version. GitHub Release tags carry the release version externally, so the asset filename itself intentionally stays stable from release to release.
-
-## Runtime layout contract
-
 The Racket loader searches in this order:
 
-1. `BEZEL_LIBRARY` — an explicit shared-library file.
-2. `BEZEL_NATIVE_DIR` — the root of an extracted runtime archive.
-3. `bezel-lib/native/<os>-<arch>/` — package-local runtime files used by self-contained release packages.
-4. A source-checkout `bezel-shim/build` directory.
-5. The operating system's normal dynamic-library search paths.
+1. `BEZEL_LIBRARY` — explicit shared-library file.
+2. `BEZEL_NATIVE_DIR` — extracted/modified runtime root.
+3. `bezel-lib/native/<os>-<arch>/` — package-local runtime.
+4. source-checkout build directory.
+5. operating-system dynamic-library paths.
 
-Set `BEZEL_REQUIRE_PACKAGED_RUNTIME=1` to disable source-build and system fallbacks. Release smoke tests always enable this mode.
-
-If the runtime has a bundled Qt plugin directory and `QT_PLUGIN_PATH` has not been explicitly set by the application, Bezel configures it before creating `QApplication`.
-
-Run:
-
-```text
-raco bezel doctor
-```
-
-for platform, architecture, environment, candidate-path, selected-shim, hermetic-mode, and ABI load diagnostics.
-
-## Artifact integrity
-
-Two checksum forms are published intentionally:
-
-- `bezel-lib-<platform>.zip.CHECKSUM` uses the checksum format expected by Racket package distribution tooling.
-- `SHA256SUMS` covers the release archives with SHA-256 for users, CI systems, mirrors, and supply-chain tooling.
-
-A release is generated only from an immutable `v*` tag after the clean installation tests pass.
-
-## Qt and third-party redistribution
-
-The public CI configuration installs the open-source Qt packages available to the GitHub-hosted runners/package managers. That is suitable for open-source CI validation, but it does not by itself decide the license under which a commercial product should redistribute Qt or the third-party libraries included in a runtime dependency closure.
-
-For a commercial product, make that choice explicitly:
-
-- If using a Qt commercial license, build release runtimes from the Qt distribution and terms applicable to that license.
-- If redistributing under an open-source Qt license, satisfy all obligations that apply to the exact modules and version being shipped, including required notices/license text, source/relinking requirements where applicable, and other distribution conditions.
-- Review licenses for non-Qt libraries copied into the Linux runtime closure and include required notices/source offers where applicable.
-
-Tagged publication fails closed unless the repository explicitly acknowledges the Qt redistribution mode. See [QT_REDISTRIBUTION_GATE.md](QT_REDISTRIBUTION_GATE.md).
-
-Do not treat Bezel's MIT license as replacing Qt's or bundled third-party components' license terms.
-
-Official references:
-
-- Qt licensing: https://www.qt.io/licensing/
-- Qt open-source obligations: https://www.qt.io/licensing/open-source-lgpl-obligations
-- Qt deployment overview: https://doc.qt.io/qt-6/deployment.html
+Set `BEZEL_REQUIRE_PACKAGED_RUNTIME=1` to disable source/system fallbacks during hermetic verification. This does not stop a recipient from replacing files inside the selected runtime.
 
 ## Product signing
 
-The repository-level packages are SDK/runtime inputs. The final desktop product should own platform trust decisions:
+- Windows: Authenticode-sign the final product/installer according to product policy.
+- macOS: Developer ID sign/notarize the final application when appropriate. Modified local LGPL/relinking builds may need to be re-signed by the recipient; the Bezel relinking guide documents ad-hoc local signing.
+- Linux: use repository/package signatures or another verifiable supply-chain mechanism appropriate to the distribution channel.
 
-- Windows: Authenticode-sign the executable/installer and any binaries required by the product's signing policy.
-- macOS: sign the final application bundle and perform notarization when distributing outside the Mac App Store.
-- Linux: publish package/repository signatures or another verifiable software-supply-chain mechanism appropriate to the distribution channel.
-
-Signing identities and notarization credentials are intentionally not stored in this public repository.
+Signing must not be designed in a way that defeats rights required by the selected Qt/LGPL distribution model.
 
 ## Release blockers
 
-Do not publish a production release when any of these are true:
+Do not publish a public production release when any of these are true:
 
-- ABI version in Racket and the shim disagree.
-- A native packaging job fails.
-- A clean self-contained package smoke job fails.
-- Generated bindings are dirty after regeneration.
-- The changelog/version/tag do not agree.
-- A required runtime dependency or Qt platform plugin is absent from the package.
-- Required Qt/third-party licensing material for the chosen distribution model has not been prepared.
-- The final commercial application has not completed the signing/notarization process required by its distribution channel.
+- ABI/version/tag/generated bindings disagree.
+- The license policy checker fails.
+- The exact QtBase base source or any required official security patch cannot be downloaded or fails SHA-256 verification.
+- The live official Qt 6.8 `qtbase` patch index differs from the reviewed inventory.
+- Required Qt/LGPL/third-party notice/relinking material is missing.
+- The package accidentally includes a forbidden non-Qt runtime dependency.
+- Bezel is no longer dynamically linked to the expected Qt libraries.
+- Native packaging or a clean package smoke job fails.
+- The final application/channel cannot preserve required LGPL recipient rights.
+- The final product has unresolved licenses for application-specific dependencies.
+- Required production signing/notarization/channel checks are incomplete.
+
+## Official references
+
+- Qt open-source/LGPL obligations: <https://www.qt.io/development/open-source-lgpl-obligations>
+- Qt open-source usage overview: <https://www.qt.io/development/download-open-source>
+- Qt deployment overview: <https://doc.qt.io/qt-6/deployment.html>
+- QtBase 6.8.4 release source archive directory: <https://download.qt.io/official_releases/qt/6.8/6.8.4/submodules/>
+- Official Qt 6.8 security patch index: <https://download.qt.io/official_releases/qt/6.8/>
+- Microsoft Visual C++ redistribution guidance: <https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files>

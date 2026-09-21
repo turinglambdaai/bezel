@@ -5,7 +5,7 @@ All notable changes to Bezel are documented here. The format follows
 
 ## 0.2.0 — 2026-09-21
 
-Commercial-hardening release focused on correctness, reproducibility, and portable native distribution.
+Commercial-hardening release focused on correctness, reproducibility, portable native distribution, and auditable licensing.
 
 ### Added
 
@@ -20,7 +20,17 @@ Commercial-hardening release focused on correctness, reproducibility, and portab
 - Linux relocatable runtime packaging with Qt libraries/plugins and explicit `$ORIGIN` RPATHs.
 - Clean-runner runtime smoke tests on Linux x86_64, Windows x86_64, and macOS arm64. These jobs install Racket only and exercise real Qt widgets from the packaged runtime.
 - Tag-driven GitHub Release workflow that rebuilds, clean-smoke-tests, checksums, and publishes verified native runtime archives.
+- Fail-closed public Qt redistribution policy pinned to QtBase 6.8.4 public source plus reviewed official Qt 6.8 security patches through 2026-09-22, LGPLv3 dynamic linking, and exact source/patch SHA-256 values.
+- Per-runtime `LICENSES/` bundle with Qt/LGPL license texts, Bezel MIT text, third-party attribution metadata/notices, relinking instructions, and machine-readable compliance metadata.
+- Verified corresponding-source generation: tagged public releases publish the exact QtBase base source and applied security-patch bundle beside binaries rather than relying on upstream URLs alone.
+- `scripts/check-license-policy.py` to prevent wildcard Qt versions, accidental public commercial-Qt claims, or reintroduction of unrelated bundled runtime libraries.
 - Commercial release engineering checklist covering runtime support, Qt redistribution decisions, signing/notarization, and release blockers.
+
+### Changed
+
+- Public GitHub binary releases are LGPLv3-only. Commercial-Qt product builds must use a separate private pipeline backed by the license holder's commercial Qt distribution/provenance.
+- Public Linux runtimes redistribute Bezel + Qt only; host/system libraries remain OS prerequisites instead of being recursively copied into the archive.
+- Public Windows runtimes no longer redistribute MSVC CRT DLLs; a compatible Visual C++ runtime is a target prerequisite.
 
 ### Fixed
 
