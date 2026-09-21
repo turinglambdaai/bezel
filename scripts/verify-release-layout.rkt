@@ -29,7 +29,13 @@
 
 (case (system-type)
   [(windows)
-   (for ([name (in-list '("bezel.dll" "Qt6Core.dll" "Qt6Gui.dll" "Qt6Widgets.dll"))])
+   (for ([name (in-list '("bezel.dll"
+                          "Qt6Core.dll"
+                          "Qt6Gui.dll"
+                          "Qt6Widgets.dll"
+                          "MSVCP140.dll"
+                          "VCRUNTIME140.dll"
+                          "VCRUNTIME140_1.dll"))])
      (require-file name (build-path root name)))
    (require-file 'qwindows (build-path root "platforms" "qwindows.dll"))
    (require-file 'qoffscreen (build-path root "platforms" "qoffscreen.dll"))]
