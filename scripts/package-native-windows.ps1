@@ -34,10 +34,38 @@ if (-not $probe) { throw "bezel-deploy-probe.exe was not found in $BuildDir" }
 if (-not $shim) { throw "bezel.dll was not found in $BuildDir" }
 
 $deploy = (Get-Command windeployqt.exe -ErrorAction Stop).Source
-& $deploy --release --no-translations --dir $root $probe
+# We deploy compiler runtime DLLs app-local below. Asking windeployqt not to
+# emit vc_redist.x64.exe keeps the SDK archive zero-install: merely extracting
+# or installing the Bezel package is sufficient to load it.
+& $deploy --release --no-translations --no-compiler-runtime --dir $root $probe
 if ($LASTEXITCODE -ne 0) { throw "windeployqt failed with exit code $LASTEXITCODE" }
 
 Copy-Item $shim (Join-Path $root "bezel.dll") -Force
+
+# Qt/MSVC builds depend on the Visual C++ runtime. windeployqt normally ships
+# the redistributable installer, which is appropriate for an application
+# installer but not for Bezel's self-contained SDK package. Copy the licensed
+# redistributable CRT DLLs from the active MSVC toolchain for app-local use.
+$crtArch = switch ($arch) {
+  "x86_64" { "x64" }
+  "aarch64" { "arm64" }
+  default { throw "unsupported MSVC redistributable architecture: $arch" }
+}
+
+if (-not $env:VCToolsRedistDir -or -not (Test-Path $env:VCToolsRedistDir)) {
+  throw "VCToolsRedistDir is not configured; run the packager from an MSVC developer environment"
+}
+
+$crtDirs = Get-ChildItem -Path (Join-Path $env:VCToolsRedistDir $crtArch) -Directory -Filter "Microsoft.VC*.CRT" -ErrorAction SilentlyContinue
+if (-not $crtDirs) {
+  throw "MSVC CRT redistributable directory was not found under $env:VCToolsRedistDir\$crtArch"
+}
+
+foreach ($crtDir in $crtDirs) {
+  Get-ChildItem -Path $crtDir.FullName -File -Filter "*.dll" | ForEach-Object {
+    Copy-Item $_.FullName (Join-Path $root $_.Name) -Force
+  }
+}
 
 # windeployqt focuses on the normal Windows QPA plugin. Bezel's automated
 # tests and many CI/server users also need the offscreen backend, so include it
@@ -66,6 +94,9 @@ foreach ($required in @(
   "Qt6Core.dll",
   "Qt6Gui.dll",
   "Qt6Widgets.dll",
+  "MSVCP140.dll",
+  "VCRUNTIME140.dll",
+  "VCRUNTIME140_1.dll",
   "platforms/qwindows.dll",
   "platforms/qoffscreen.dll"
 )) {
