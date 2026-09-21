@@ -1,20 +1,17 @@
-name: CI
+name: Release
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    tags:
+      - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  generated:
+  metadata:
+    name: Verify release metadata
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -25,115 +22,65 @@ jobs:
         with:
           version: '8.12'
 
-      - name: Verify version consistency
+      - name: Verify repository versions
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: racket scripts/check-version.rkt
 
-      - name: Regenerate checked-in bindings
-        run: racket tools/generator/generate.rkt tools/generator/specs/dial.json
+      - name: Verify tag matches repository version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: racket scripts/check-version.rkt "$GITHUB_REF_NAME"
 
-      - name: Verify generated bindings are reproducible
-        run: git diff --exit-code -- bezel-shim/src/generated bezel-lib/generated
-
-  test:
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macOS-latest]
-        racket-version: ['8.12']
-
+  redistribution-policy:
+    name: Verify Qt redistribution approval
+    needs: metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - name: Manual validation mode
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: echo "Manual release validation does not publish Qt binaries."
 
-      - name: Install Racket
-        uses: Bogdanp/setup-racket@v1.11
-        with:
-          version: ${{ matrix.racket-version }}
-          architecture: ${{ runner.os == 'macOS' && 'arm64' || 'x64' }}
-
-      - name: Install Qt6 (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qt6-base-dev qt6-base-dev-tools libgl1-mesa-dev
-          echo "CMAKE_PREFIX_PATH=/usr" >> $GITHUB_ENV
-
-      - name: Install Qt6 (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install qt cmake
-          echo "CMAKE_PREFIX_PATH=$(brew --prefix qt)" >> $GITHUB_ENV
-
-      - name: Install Qt6 (Windows)
-        if: runner.os == 'Windows'
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: '6.7.*'
-          archives: qtbase
-          cache: true
-
-      - name: Configure shim (Linux/macOS)
-        if: runner.os != 'Windows'
-        run: cmake -S bezel-shim -B bezel-shim/build -DCMAKE_BUILD_TYPE=Release
-
-      - name: Set up MSVC (Windows)
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Configure shim (Windows)
-        if: runner.os == 'Windows'
-        run: cmake -S bezel-shim -B bezel-shim\build -DCMAKE_BUILD_TYPE=Release -G Ninja
-
-      - name: Build shim (Linux/macOS)
-        if: runner.os != 'Windows'
-        run: cmake --build bezel-shim/build -j
-
-      - name: Build shim (Windows)
-        if: runner.os == 'Windows'
-        run: cmake --build bezel-shim\build --config Release -j
-
-      - name: Link Racket packages
-        run: |
-          raco pkg install --auto --no-docs --link ./bezel-lib
-          raco pkg install --auto --no-docs --link ./bezel-test
-          raco pkg install --auto --no-docs --link ./bezel
-
-      - name: Shim diagnostics (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          ls -la bezel-shim/build/
-          otool -L bezel-shim/build/libbezel*.dylib || true
-
-      - name: Run tests
+      - name: Gate tagged Qt redistribution
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
         env:
-          QT_QPA_PLATFORM: offscreen
-          BEZEL_TEST_PROGRESS: '1'
-          BEZEL_MARSHAL_DEBUG: '1'
-        timeout-minutes: 8
-        run: raco test bezel-test/
+          LICENSE_MODE: ${{ vars.BEZEL_QT_LICENSE_MODE }}
+          REDISTRIBUTION_ACK: ${{ vars.BEZEL_QT_REDISTRIBUTION_ACK }}
+          SOURCE_OFFER_URL: ${{ vars.BEZEL_QT_SOURCE_OFFER_URL }}
+        run: |
+          set -euo pipefail
+          if [[ "$REDISTRIBUTION_ACK" != "approved" ]]; then
+            echo "Tagged releases redistribute Qt runtime binaries." >&2
+            echo "Set repository variable BEZEL_QT_REDISTRIBUTION_ACK=approved only after the distribution rights and obligations for the exact Qt build have been reviewed." >&2
+            exit 1
+          fi
 
-      - name: Generate showcase screenshot
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: racket scripts/showcase.rkt docs/showcase.png
+          case "$LICENSE_MODE" in
+            commercial)
+              echo "Qt redistribution mode: commercial (repository owner acknowledgement)."
+              ;;
+            lgpl)
+              if [[ -z "$SOURCE_OFFER_URL" ]]; then
+                echo "LGPL redistribution requires BEZEL_QT_SOURCE_OFFER_URL to point to the distributor-controlled corresponding-source/source-offer location for the exact Qt build." >&2
+                exit 1
+              fi
+              echo "Qt redistribution mode: LGPL; source/source-offer location configured."
+              ;;
+            *)
+              echo "Set BEZEL_QT_LICENSE_MODE to either 'commercial' or 'lgpl'." >&2
+              exit 1
+              ;;
+          esac
 
-      - name: Upload showcase artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: showcase-${{ matrix.os }}
-          path: docs/showcase.png
-
-  native-package:
-    name: Native package (${{ matrix.asset }})
+  native:
+    name: Build release package (${{ matrix.platform }})
+    needs: [metadata, redistribution-policy]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Build the Linux release on the oldest supported glibc/libstdc++
-          # baseline, then smoke it on both the baseline and current Ubuntu.
           - os: ubuntu-22.04
             asset: bezel-native-linux-x86_64
             archive: bezel-native-linux-x86_64.tar.gz
@@ -220,16 +167,16 @@ jobs:
       - name: Upload release inputs
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.asset }}
+          name: release-${{ matrix.asset }}
           path: |
             dist/${{ matrix.archive }}
             dist/bezel-lib-${{ matrix.platform }}.zip
             dist/bezel-lib-${{ matrix.platform }}.zip.CHECKSUM
           if-no-files-found: error
 
-  native-smoke:
-    name: Clean package smoke (${{ matrix.target }})
-    needs: native-package
+  smoke:
+    name: Verify release package (${{ matrix.target }})
+    needs: native
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
@@ -269,7 +216,7 @@ jobs:
       - name: Download packaged artifacts
         uses: actions/download-artifact@v4
         with:
-          name: ${{ matrix.asset }}
+          name: release-${{ matrix.asset }}
           path: dist
 
       - name: Install self-contained Bezel package
@@ -287,21 +234,55 @@ jobs:
           BEZEL_REQUIRE_PACKAGED_RUNTIME: '1'
         run: racket scripts/native-smoke.rkt
 
-  docs:
+  publish:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: smoke
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Racket
-        uses: Bogdanp/setup-racket@v1.11
+      - name: Download all verified release inputs
+        uses: actions/download-artifact@v4
         with:
-          version: '8.12'
+          pattern: release-bezel-native-*
+          path: dist
+          merge-multiple: true
 
-      - name: Link packages
+      - name: Generate SHA-256 checksums
         run: |
-          raco pkg install --auto --no-docs --link ./bezel-lib
-          raco pkg install --auto --no-docs --link ./bezel-doc
+          cd dist
+          sha256sum bezel-native-* bezel-lib-*.zip > SHA256SUMS
+          cat SHA256SUMS
 
-      - name: Build documentation
-        run: raco setup bezel-doc
+      - name: Record redistribution mode
+        env:
+          LICENSE_MODE: ${{ vars.BEZEL_QT_LICENSE_MODE }}
+          SOURCE_OFFER_URL: ${{ vars.BEZEL_QT_SOURCE_OFFER_URL }}
+        run: |
+          {
+            echo "Bezel release: $GITHUB_REF_NAME"
+            echo "Qt redistribution mode: $LICENSE_MODE"
+            if [[ "$LICENSE_MODE" == "lgpl" ]]; then
+              echo "Distributor-controlled Qt source/source-offer location: $SOURCE_OFFER_URL"
+            fi
+            echo "See docs/COMMERCIAL_RELEASE.md in the tagged source for release obligations and limitations."
+          } > dist/QT-REDISTRIBUTION.txt
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/bezel-native-* \
+            dist/bezel-lib-*.zip \
+            dist/bezel-lib-*.zip.CHECKSUM \
+            dist/SHA256SUMS \
+            dist/QT-REDISTRIBUTION.txt \
+            --verify-tag \
+            --generate-notes \
+            --title "Bezel $GITHUB_REF_NAME"

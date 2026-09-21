@@ -3,6 +3,36 @@
 All notable changes to Bezel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.2.0 — 2026-09-21
+
+Commercial-hardening release focused on correctness, reproducibility, and portable native distribution.
+
+### Added
+
+- Native ABI compatibility guard between the Racket bindings and `libbezel`.
+- Lifecycle-safe signal connection cleanup and target ownership validation.
+- GUI-thread marshaling and error propagation for generated bindings.
+- Cross-platform generated-binding reproducibility checks in CI.
+- Portable native runtime discovery via `BEZEL_NATIVE_DIR` and package-local platform directories.
+- `raco bezel doctor` for platform, runtime-path, environment, and ABI diagnostics.
+- Windows runtime packaging through `windeployqt`, including headless/offscreen platform support.
+- macOS runtime packaging through `macdeployqt`, with an intact relocatable app-bundle runtime layout.
+- Linux relocatable runtime packaging with Qt libraries/plugins and explicit `$ORIGIN` RPATHs.
+- Clean-runner runtime smoke tests on Linux x86_64, Windows x86_64, and macOS arm64. These jobs install Racket only and exercise real Qt widgets from the packaged runtime.
+- Tag-driven GitHub Release workflow that rebuilds, clean-smoke-tests, checksums, and publishes verified native runtime archives.
+- Commercial release engineering checklist covering runtime support, Qt redistribution decisions, signing/notarization, and release blockers.
+
+### Fixed
+
+- Public lifetime documentation now matches the no-deleting-finalizer ownership model.
+- Temporary FFI allocations in PNG capture and test-signal marshaling are released deterministically.
+- Failed native disconnects no longer unregister live Racket signal handlers.
+- Destroyed Qt targets retire native connection records and Racket handlers.
+- Wrong-widget sentinel values now surface native errors instead of leaking sentinel integers to callers.
+- Reparenting updates Racket-side ownership state.
+- Pump arguments are validated before reaching native code.
+- Example applications create `QApplication` before constructing widgets.
+
 ## 0.1.0 — 2025-09-15
 
 First release: Qt 6 Widgets bound to Racket, end to end.
@@ -30,9 +60,9 @@ First release: Qt 6 Widgets bound to Racket, end to end.
 - **Racket bindings** (`bezel-lib/`): collection `bezel` with
   `make-application` / `run` (cooperative pump loop) / `quit!`;
   `make-*` constructors with keyword options; `connect!` /
-  `disconnect!` / `emit-test-signal!`; ownership model with
-  finalizers (`bezel-alive?`, `bezel-delete!`); `exn:fail:bezel` error
-  surface with shim messages attached.
+  `disconnect!` / `emit-test-signal!`; explicit lifetime/ownership APIs
+  (`bezel-alive?`, `bezel-delete!`); `exn:fail:bezel` error surface with
+  shim messages attached.
 - **Threading model**: cooperative GUI-thread marshaling (any Racket
   thread can call any bezel function; calls from handlers and other
   threads are queued and drained by the pump) and a signal dispatcher
