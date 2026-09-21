@@ -2,36 +2,18 @@
 
 ;; Bezel binding generator: JSON class specs → C++ shim + Racket FFI.
 ;;
-;; The handwritten core (bezel-lib + bezel-shim/src) covers the common
-;; widgets with hand-tuned ergonomics. Scale-up coverage — the long tail
-;; of the Qt API — is spec-driven, exactly like the mature bindings
-;; (PySide/Shiboken, PyQt/SIP, Qtah) do it:
+;; The handwritten core covers the common widgets with hand-tuned
+;; ergonomics. The long tail of Qt coverage is spec-driven. Generated
+;; bindings must preserve the same invariants as handwritten bindings:
 ;;
+;;   - every Qt call enters C++ from Bezel's GUI marshal layer
+;;   - object and widget arguments are liveness-checked
+;;   - failed native calls surface exn:fail:bezel, including sentinel
+;;     numeric return values such as -1
+;;   - nullable parent handles remain nullable; non-null bad handles fail
+;;
+;; Usage:
 ;;   racket tools/generator/generate.rkt tools/generator/specs/*.json
-;;
-;; Emits:
-;;   bezel-shim/src/generated/<module>_gen.cpp   (constructors + methods)
-;;   bezel-lib/generated/<module>_gen.rkt        (bindings)
-;;
-;; The CMake config globs src/generated/*.cpp; require the generated
-;; .rkt from bezel-lib/main.rkt, then rebuild (`cmake --build`,
-;; `raco make`).
-;;
-;; Spec format (JSON):
-;; {
-;;   "class":  "QDial",
-;;   "module": "dial",
-;;   "header": "QDial",
-;;   "constructors": [ { "c-name": "dial_new", "args": ["parent"] } ],
-;;   "methods": [
-;;     { "c-name": "dial_set_notches", "qt": "setNotchesVisible", "args": ["bool"] },
-;;     { "c-name": "dial_notches"  "qt": "notchesVisible"  "ret": "bool" }
-;;   ],
-;;   "signals": ["valueChanged(int)"]
-;; }
-;;
-;; Arg types: "parent" (widget handle), "widget", "string", "int",
-;; "double", "bool".
 
 (require json
          racket/file
@@ -51,14 +33,16 @@
     ["string" "const char*"]
     ["int"    "int"]
     ["double" "double"]
-    ["bool"   "int"]))
+    ["bool"   "int"]
+    [_ (error 'generate "unsupported argument type: ~a" t)]))
 
 (define (cpp-ret t)
   (match t
     ["string" "const char*"]
     ["int"    "int"]
     ["double" "double"]
-    ["bool"   "int"]))
+    ["bool"   "int"]
+    [_ (error 'generate "unsupported return type: ~a" t)]))
 
 (define (rkt-type t)
   (match t
@@ -67,17 +51,40 @@
     ["string" "_string/utf-8"]
     ["int"    "_int"]
     ["double" "_double"]
-    ["bool"   "_int"]))
-
-;; C++ expression for passing numbered input i of logical type t to Qt.
-(define (c-symbol kebab)
-  (string->symbol (string-replace (symbol->string kebab) "-" "_")))
+    ["bool"   "_int"]
+    [_ (error 'generate "unsupported argument type: ~a" t)]))
 
 (define (cpp-pass t i)
   (match t
     ["string" (format "q_str~a" i)]
     ["bool"   (format "(in~a != 0)" i)]
+    ["parent" (format "parent~a" i)]
+    ["widget" (format "widget~a" i)]
     [_        (format "in~a" i)]))
+
+(define (rkt-pass t i)
+  (match t
+    ["bool"   (format "(if v~a 1 0)" i)]
+    ["parent" (format "(and v~a (ptr-of v~a))" i i)]
+    ["widget" (format "(and v~a (ptr-of v~a))" i i)]
+    [_        (format "v~a" i)]))
+
+(define (emit-cpp-arg-prelude p args what indent)
+  (for ([t args] [i (in-naturals)])
+    (match t
+      ["string"
+       (p "~aconst QString q_str~a = QString::fromUtf8(in~a ? in~a : \"\");\n"
+          indent i i i)]
+      ["parent"
+       (p "~aQWidget* parent~a = resolve_parent(in~a, \"~a\");\n"
+          indent i i what)
+       (p "~aif (in~a && !parent~a) return nullptr;\n" indent i i)]
+      ["widget"
+       (p "~aQWidget* widget~a = resolve_as<QWidget>(in~a, \"~a\");\n"
+          indent i i what)
+       (p "~aif (!widget~a) return ~a;\n"
+          indent i "0")]
+      [_ (void)])))
 
 ;; ---- shim emitter ----------------------------------------------------------
 
@@ -106,19 +113,28 @@
     (p "BEZEL_EXPORT bezel_handle ~a(" cname)
     (unless (null? args)
       (p (string-join
-          (for/list ([t args] [i (in-naturals)]) (format "~a in~a" (cpp-type t) i))
+          (for/list ([t args] [i (in-naturals)])
+            (format "~a in~a" (cpp-type t) i))
           ", ")))
     (p ") {\n")
     (p "    return on_gui([=]() -> bezel_handle {\n")
+    ;; Constructors return a pointer, so emit parent/widget checks here
+    ;; rather than using the generic method prelude's integer sentinel.
     (for ([t args] [i (in-naturals)])
-      (when (equal? t "string")
-        (p "        const QString q_str~a = QString::fromUtf8(in~a ? in~a : \"\");\n" i i i)))
+      (match t
+        ["string"
+         (p "        const QString q_str~a = QString::fromUtf8(in~a ? in~a : \"\");\n"
+            i i i)]
+        ["parent"
+         (p "        QWidget* parent~a = resolve_parent(in~a, \"~a\");\n" i i cname)
+         (p "        if (in~a && !parent~a) return nullptr;\n" i i)]
+        ["widget"
+         (p "        QWidget* widget~a = resolve_as<QWidget>(in~a, \"~a\");\n" i i cname)
+         (p "        if (!widget~a) return nullptr;\n" i)]
+        [_ (void)]))
     (define ctor-args
       (string-join
-       (for/list ([t args] [i (in-naturals)])
-         (match t
-           ["parent" (format "resolve_parent(in~a, \"~a\")" i cname)]
-           [_ (cpp-pass t i)]))
+       (for/list ([t args] [i (in-naturals)]) (cpp-pass t i))
        ", "))
     (p "        return register_object(new ~a(~a));\n" class ctor-args)
     (p "    });\n}\n\n"))
@@ -133,26 +149,50 @@
        (if ret (cpp-ret ret) "int")
        mname
        (string-join
-        (for/list ([t margs] [i (in-naturals)]) (format ", ~a in~a" (cpp-type t) i))
+        (for/list ([t margs] [i (in-naturals)])
+          (format ", ~a in~a" (cpp-type t) i))
         ""))
     (p "    return on_gui([=]() -> ~a {\n" (if ret (cpp-ret ret) "int"))
+    (p "        ~a* obj = resolve_obj(h, \"~a\");\n" class mname)
+    (p "        if (!obj) return ~a;\n"
+       (cond
+         [(not ret) "0"]
+         [(equal? ret "double") "-1.0"]
+         [(equal? ret "string") "nullptr"]
+         [else "-1"]))
     (for ([t margs] [i (in-naturals)])
-      (when (equal? t "string")
-        (p "        const QString q_str~a = QString::fromUtf8(in~a ? in~a : \"\");\n" i i i)))
+      (match t
+        ["string"
+         (p "        const QString q_str~a = QString::fromUtf8(in~a ? in~a : \"\");\n"
+            i i i)]
+        ["parent"
+         (p "        QWidget* parent~a = resolve_parent(in~a, \"~a\");\n" i i mname)
+         (p "        if (in~a && !parent~a) return ~a;\n"
+            i i
+            (cond [(not ret) "0"]
+                  [(equal? ret "double") "-1.0"]
+                  [(equal? ret "string") "nullptr"]
+                  [else "-1"]))]
+        ["widget"
+         (p "        QWidget* widget~a = resolve_as<QWidget>(in~a, \"~a\");\n" i i mname)
+         (p "        if (!widget~a) return ~a;\n"
+            i
+            (cond [(not ret) "0"]
+                  [(equal? ret "double") "-1.0"]
+                  [(equal? ret "string") "nullptr"]
+                  [else "-1"]))]
+        [_ (void)]))
     (define call-args
-      (string-join (for/list ([t margs] [i (in-naturals)]) (cpp-pass t i)) ", "))
+      (string-join
+       (for/list ([t margs] [i (in-naturals)]) (cpp-pass t i))
+       ", "))
     (cond
       [ret
-       (p "        ~a* obj = resolve_obj(h, \"~a\");\n" class mname)
-       (p "        if (!obj) return ~a;\n"
-          (match ret ["double" "-1.0"] ["string" "nullptr"] [_ "-1"]))
        (match ret
          ["string" (p "        return strdup_q(obj->~a(~a));\n" qt call-args)]
          ["bool"   (p "        return obj->~a(~a) ? 1 : 0;\n" qt call-args)]
          [_        (p "        return obj->~a(~a);\n" qt call-args)])]
       [else
-       (p "        ~a* obj = resolve_obj(h, \"~a\");\n" class mname)
-       (p "        if (!obj) return 0;\n")
        (p "        obj->~a(~a);\n" qt call-args)
        (p "        return 1;\n")])
     (p "    });\n}\n\n"))
@@ -160,7 +200,7 @@
   (p "}  // extern \"C\"\n\n")
   (get-output-string out))
 
-;; ---- racket emitter ---------------------------------------------------------
+;; ---- Racket emitter --------------------------------------------------------
 
 (define (emit-racket spec)
   (define ctors (hash-ref spec 'constructors '()))
@@ -176,38 +216,46 @@
   (for ([m methods]) (p "\n         ~a" (hash-ref m 'c-name)))
   (p ")\n\n")
   (p "(require ffi/unsafe\n")
-  (p "         racket/string\n")
   (p "         \"../private/ctypes.rkt\"\n")
   (p "         \"../private/errors.rkt\"\n")
+  (p "         \"../private/lib.rkt\"\n")
+  (p "         \"../private/marshal.rkt\"\n")
   (p "         \"../private/objects.rkt\"\n")
-  (p "         \"../private/lib.rkt\")\n\n")
-  (p ";; Each binding: raw:<kebab> looks up the snake_case C symbol; the\n")
-  (p ";; public wrapper below is named <kebab>.\n\n")
+  (p "         (only-in \"../private/raw.rkt\" bezel-free))\n\n")
+  (p ";; Direct FFI procedures are private to this generated module. Every\n")
+  (p ";; public operation enters them through `gui`, matching handwritten\n")
+  (p ";; Bezel bindings and preserving free-threaded public semantics.\n\n")
 
   (for ([c ctors])
     (define kebab (hash-ref c 'c-name))
     (define snake (string-replace kebab "-" "_"))
     (define args (hash-ref c 'args '()))
     (define has-parent (member "parent" args))
-    (define parent-idx (if has-parent (index-of args "parent") #f))
-    (p "(define raw:~a (get-ffi-obj '~a bezel-lib (_fun ~a -> _bezel-handle)))\n"
-       kebab snake
-       (string-join (for/list ([t args]) (rkt-type t)) " "))
+    (define parent-idx (and has-parent (index-of args "parent")))
+    (p "(define ffi:~a (get-ffi-obj '~a bezel-lib (_fun ~a -> _bezel-handle)))\n"
+       kebab snake (string-join (for/list ([t args]) (rkt-type t)) " "))
     (p "(define (~a~a)\n" kebab
-       (string-join (for/list ([t args] [i (in-naturals)])
-                      (format " [v~a ~a]" i
-                              (match t
-                                ["string" "\"\""]
-                                ["double" "0.0"]
-                                ["int" "0"]
-                                [_ "#f"])))
-                    ""))
+       (string-join
+        (for/list ([t args] [i (in-naturals)])
+          (format " [v~a ~a]" i
+                  (match t
+                    ["string" "\"\""]
+                    ["double" "0.0"]
+                    ["int" "0"]
+                    [_ "#f"])))
+        ""))
     (p "  (require-application)\n")
-    (p "  (wrap-handle (ok-handle '~a (raw:~a~a))\n"
-       (string->symbol kebab) (string->symbol kebab)
-       (string-join (for/list ([t args] [i (in-naturals)])
-                      (if (equal? t "parent") (format " (and v~a (ptr-of v~a))" i i) (format " v~a" i)))
-                    ""))
+    (for ([t args] [i (in-naturals)]
+          #:when (or (equal? t "parent") (equal? t "widget")))
+      (p "  (when v~a (require-alive! '~a v~a))\n" i (string->symbol kebab) i))
+    (p "  (define ptr\n")
+    (p "    (gui (lambda () (ffi:~a~a))))\n"
+       (string->symbol kebab)
+       (string-join
+        (for/list ([t args] [i (in-naturals)])
+          (format " ~a" (rkt-pass t i)))
+        ""))
+    (p "  (wrap-handle (ok-handle '~a ptr)\n" (string->symbol kebab))
     (p "               'widget ~a))\n\n"
        (if has-parent (format "(not v~a)" parent-idx) "#t")))
 
@@ -216,46 +264,49 @@
     (define snake (string-replace kebab "-" "_"))
     (define margs (hash-ref m 'args '()))
     (define ret (hash-ref m 'ret #f))
+    (define params
+      (string-join
+       (for/list ([t margs] [i (in-naturals)]) (format " v~a" i))
+       ""))
     (define call-args
-      (format "(ptr-of o)~a"
-              (string-join
-               (for/list ([t margs] [i (in-naturals)])
-                 (format " ~a" (if (equal? t "bool") (format "(if v~a 1 0)" i) (format "v~a" i))))
-               "")))
-    (p "(define raw:~a (get-ffi-obj '~a bezel-lib (_fun _bezel-handle~a -> ~a)))\n"
+      (string-join
+       (for/list ([t margs] [i (in-naturals)])
+         (format " ~a" (rkt-pass t i)))
+       ""))
+    (p "(define ffi:~a (get-ffi-obj '~a bezel-lib (_fun _bezel-handle~a -> ~a)))\n"
        kebab snake
        (string-join (for/list ([t margs]) (format " ~a" (rkt-type t))) "")
-       (match ret ["string" "_pointer"] [_ (if ret (rkt-type ret) "_int")]))
+       (match ret
+         ["string" "_pointer"]
+         [_ (if ret (rkt-type ret) "_int")]))
+    (p "(define (~a o~a)\n" (string->symbol kebab) params)
+    (p "  (require-alive! '~a o)\n" (string->symbol kebab))
+    (for ([t margs] [i (in-naturals)]
+          #:when (or (equal? t "parent") (equal? t "widget")))
+      (p "  (when v~a (require-alive! '~a v~a))\n" i (string->symbol kebab) i))
+    (p "  (define r\n")
+    (p "    (gui (lambda () (ffi:~a (ptr-of o)~a))))\n"
+       (string->symbol kebab) call-args)
     (cond
       [(equal? ret "string")
-       (p "(define (~a o~a)\n" (string->symbol kebab)
-          (string-join (for/list ([t margs] [i (in-naturals)]) (format " v~a" i)) ""))
-       (p "  (require-alive! '~a o)\n" (string->symbol kebab))
-       (p "  (define ptr (ok-string '~a (raw:~a~a)))\n"
-          (string->symbol kebab) (string->symbol kebab) call-args)
-       (p "  (begin0 (cstring->string/utf8 ptr)\n    (bezel-free ptr)))\n\n")]
+       (p "  (define ptr (ok-string '~a r))\n" (string->symbol kebab))
+       (p "  (begin0 (cstring->string/utf8 ptr)\n")
+       (p "    (bezel-free ptr)))\n\n")]
       [(equal? ret "bool")
-       (p "(define (~a o~a)\n" (string->symbol kebab)
-          (string-join (for/list ([t margs] [i (in-naturals)]) (format " v~a" i)) ""))
-       (p "  (require-alive! '~a o)\n" (string->symbol kebab))
-       (p "  (define r (raw:~a~a))\n" (string->symbol kebab) call-args)
-       (p "  (cond [(= r -1) (raise-bezel-error '~a)]\n        [(= r 1) #t]\n        [else #f]))\n\n"
-          (string->symbol kebab))]
+       (p "  (cond [(= r -1) (raise-bezel-error '~a)]\n" (string->symbol kebab))
+       (p "        [(= r 1) #t]\n")
+       (p "        [else #f]))\n\n")]
       [ret
-       (p "(define (~a o~a)\n" (string->symbol kebab)
-          (string-join (for/list ([t margs] [i (in-naturals)]) (format " v~a" i)) ""))
-       (p "  (require-alive! '~a o)\n" (string->symbol kebab))
-       (p "  (raw:~a~a))\n\n" (string->symbol kebab) call-args)]
+       (p "  (when (and (= r ~a) (last-error))\n"
+          (if (equal? ret "double") "-1.0" "-1"))
+       (p "    (raise-bezel-error '~a))\n" (string->symbol kebab))
+       (p "  r)\n\n")]
       [else
-       (p "(define (~a o~a)\n" (string->symbol kebab)
-          (string-join (for/list ([t margs] [i (in-naturals)]) (format " v~a" i)) ""))
-       (p "  (require-alive! '~a o)\n" (string->symbol kebab))
-       (p "  (ok! '~a (raw:~a~a)))\n\n"
-          (string->symbol kebab) (string->symbol kebab) call-args)]))
+       (p "  (ok! '~a r))\n\n" (string->symbol kebab))]))
 
   (get-output-string out))
 
-;; ---- driver -----------------------------------------------------------------
+;; ---- driver ----------------------------------------------------------------
 
 (module+ main
   (define argv (current-command-line-arguments))
@@ -271,6 +322,11 @@
     (define gen-rkt (build-path repo-root "bezel-lib" "generated"))
     (make-directory* gen-shim)
     (make-directory* gen-rkt)
-    (display-to-file (emit-shim spec) (build-path gen-shim (~a module "_gen.cpp")) #:exists 'replace)
-    (display-to-file (emit-racket spec) (build-path gen-rkt (~a module "_gen.rkt")) #:exists 'replace)
-    (printf "generate: ~a -> <~a>_gen.cpp + <~a>_gen.rkt\n" (hash-ref spec 'class) module module)))
+    (display-to-file (emit-shim spec)
+                     (build-path gen-shim (~a module "_gen.cpp"))
+                     #:exists 'replace)
+    (display-to-file (emit-racket spec)
+                     (build-path gen-rkt (~a module "_gen.rkt"))
+                     #:exists 'replace)
+    (printf "generate: ~a -> <~a>_gen.cpp + <~a>_gen.rkt\n"
+            (hash-ref spec 'class) module module)))
