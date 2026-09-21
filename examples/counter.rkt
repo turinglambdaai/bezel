@@ -5,6 +5,8 @@
 
 (require bezel)
 
+(make-application #:name "Bezel Counter")
+
 (define stylesheet
   (string-append
    "QWidget { background: #F4F3EE; font-size: 15px; }"

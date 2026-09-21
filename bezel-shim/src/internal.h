@@ -3,10 +3,9 @@
 // Three load-bearing pieces live here:
 //   1. resolve()/register_object() — the handle registry (QObject* <->
 //      QPointer) that lets Racket hold long-lived handles safely.
-//   2. on_gui() — the threading rule of the whole shim: every exported
-//      function runs its Qt work through on_gui, which either executes
-//      inline (caller is the GUI thread) or marshals a blocking queued
-//      call onto it. This is what makes the Racket API free-threaded.
+//   2. on_gui() — the single seam all exported Qt-touching functions use.
+//      It executes inline; the Racket layer owns cooperative cross-thread
+//      marshaling so the C++ side never performs a blocking handoff.
 //   3. queue_signal()/next_signal() — the signal bridge. Qt signal
 //      handlers (plain C++ lambdas, no Racket involvement) pack their
 //      arguments and append to a locked queue; a Racket dispatcher
@@ -29,6 +28,7 @@
 #include <mutex>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
 
 namespace bezel {
 
@@ -84,14 +84,10 @@ bezel_handle register_object(QObject* obj);
 // True when the caller is the thread that runs (or will run) the Qt loop.
 bool on_gui_thread();
 
-// Run f on the calling thread. Threading policy: the C ABI never blocks
-// on a cross-thread handoff — a raw foreign wait freezes Racket CS's
-// cooperatively scheduled threads when they migrate OS threads. Instead,
-// the exported functions execute inline and the RACKET layer (see
-// bezel-lib/private/gui.rkt) marshals: it enqueues the call, waits on a
-// Racket semaphore (cooperative, scheduler-friendly), and the pump loop
-// on the main thread drains the queue. C-side on_gui remains as the
-// single seam all exported functions go through.
+// Execute one Qt-facing operation. The C ABI deliberately never blocks
+// on a cross-thread handoff: a raw foreign wait can freeze Racket CS's
+// cooperative scheduler. The Racket layer (private/marshal.rkt) decides
+// whether to run inline or enqueue the operation onto the GUI pump.
 template <typename F>
 auto on_gui(F&& f) -> decltype(f()) {
     clear_error();
@@ -115,10 +111,12 @@ void queue_signal(int64_t conn_id, int argc, const bezel_variant* argv);
 // 0 on timeout, -1 on shutdown request.
 int wait_signal(int timeout_ms, bezel_signal_msg* out);
 
-// Ask wait_signal to return -1 (used by bezel_cleanup).
+// Ask wait_signal to return -1, discard queued messages, and retire all
+// native signal connections (used by bezel_cleanup).
 void shutdown_signal_queue();
 
-// Clear the shutdown flag and drop undelivered entries (bezel_app_new).
+// Clear the shutdown flag and discard any undelivered entries when a new
+// QApplication lifecycle begins.
 void reset_signal_queue();
 
 // Registry of live connections: conn_id -> QMetaObject::Connection.
@@ -127,6 +125,6 @@ void reset_signal_queue();
 int64_t reserve_connection_id();
 void store_connection_with_id(int64_t conn_id, QMetaObject::Connection conn,
                               QObject* target, class SignalSink* sink, const QByteArray& sig);
-bool drop_connection(int64_t conn_id);
+bool drop_connection(int64_t conn_id, QObject* expected_target);
 
 }  // namespace bezel

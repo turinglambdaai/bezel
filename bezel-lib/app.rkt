@@ -10,7 +10,8 @@
          set-quit-on-last-window-closed!
          bezel-cleanup!)
 
-(require "private/errors.rkt"
+(require "private/dispatch.rkt"
+         "private/errors.rkt"
          "private/marshal.rkt"
          "private/raw.rkt"
          "widgets.rkt")
@@ -48,6 +49,8 @@
 ;;
 ;; Returns the code passed to quit! and releases application state.
 (define (run [win #f] #:fps [fps 60.0])
+  (unless (and (real? fps) (rational? fps) (positive? fps))
+    (raise-argument-error 'run "positive finite real number" fps))
   (make-application)
   (when win (widget-show! win))
   (set! quit-code 0)  ; window-close exits report 0 unless quit! runs
@@ -75,6 +78,8 @@
 ;; Pump the event loop for up to `ms` milliseconds without blocking in
 ;; exec — used by offscreen tests and non-blocking loops.
 (define (process-events! [ms 50])
+  (unless (exact-nonnegative-integer? ms)
+    (raise-argument-error 'process-events! "exact-nonnegative-integer?" ms))
   (ok! 'process-events! (bezel-process-events ms))
   (drain-gui!))
 
@@ -82,4 +87,8 @@
 ;; the QApplication). `run` does this automatically; idempotent.
 (define (bezel-cleanup!)
   (ok! 'bezel-cleanup! (bezel-cleanup))
+  ;; Native cleanup invalidates every connection. Drop the matching
+  ;; Racket closures too so repeated app lifecycles do not retain user
+  ;; state indefinitely.
+  (clear-handlers!)
   (set-current-application! #f))
