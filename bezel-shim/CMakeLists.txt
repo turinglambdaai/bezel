@@ -63,12 +63,12 @@ if(WIN32)
                 $<TARGET_FILE_DIR:bezel>)
 endif()
 
-# A tiny executable gives Qt's deployment tools a normal executable to
-# inspect. It is never shipped as part of the public API; packaging jobs
-# use it to discover the transitive runtime dependency set.
+# A tiny real Qt executable gives Qt's deployment tools a normal executable to
+# inspect. It is never shipped as part of the public API; packaging jobs use it
+# only to discover the transitive Qt runtime dependency set.
 add_executable(bezel-deploy-probe tools/deploy_probe.cpp)
 target_include_directories(bezel-deploy-probe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(bezel-deploy-probe PRIVATE bezel)
+target_link_libraries(bezel-deploy-probe PRIVATE bezel Qt6::Widgets)
 if(APPLE)
     set_target_properties(bezel-deploy-probe PROPERTIES MACOSX_BUNDLE TRUE)
 endif()
