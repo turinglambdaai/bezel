@@ -11,7 +11,9 @@
 ;; Versioned names follow the CMake SOVERSION: libbezel.0.dylib /
 ;; libbezel.so.0 / bezel.dll (unversioned on Windows).
 
-(provide bezel-lib)
+(provide bezel-lib
+         expected-bezel-abi-version
+         loaded-bezel-abi-version)
 
 (require ffi/unsafe
          racket/path
@@ -51,7 +53,7 @@
    (exn:fail
     (string-append
      "bezel: cannot load the Qt shim library (libbezel)\n"
-     "  Install a prebuilt shim from the releases page, or build it:\n"
+     "  Build the shim first:\n"
      "    cmake -S bezel-shim -B bezel-shim/build -DCMAKE_BUILD_TYPE=Release\n"
      "    cmake --build bezel-shim/build\n"
      "  If the library lives elsewhere, point $BEZEL_LIBRARY at the file.\n"
@@ -67,3 +69,26 @@
       (with-handlers ([exn:fail? (lambda (_e) #f)])
         (ffi-lib '("libbezel" "bezel") '("0" "")))
       (raise-missing!)))
+
+;; The Racket bindings and the native shim must agree on the exact ABI.
+;; Without this check, loading an older libbezel can fail much later as a
+;; missing symbol, wrong struct layout, or — worst case — memory corruption.
+(define expected-bezel-abi-version 2)
+
+(define loaded-bezel-abi-version
+  ((get-ffi-obj
+    'bezel_version
+    bezel-lib
+    (_fun -> _int)
+    (lambda ()
+      (error 'bezel
+             "native shim is missing bezel_version; rebuild libbezel from the same Bezel release")))))
+
+(unless (= loaded-bezel-abi-version expected-bezel-abi-version)
+  (error 'bezel
+         (string-append
+          "native shim ABI mismatch: Racket bindings require ABI ~a, "
+          "but the loaded libbezel reports ABI ~a. "
+          "Rebuild libbezel from the same Bezel release or update $BEZEL_LIBRARY.")
+         expected-bezel-abi-version
+         loaded-bezel-abi-version))
