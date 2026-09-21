@@ -32,16 +32,39 @@ if ! command -v patchelf >/dev/null 2>&1; then
   exit 1
 fi
 
+# Qt tool naming differs between distributions. Ubuntu 22.04 ships a generic
+# `qtpaths` through qtchooser, which exits with an error unless a Qt selection
+# is configured. `qmake6 -query` is the most reliable Qt 6 source there; keep
+# several fallbacks for newer distros and non-Debian systems.
 QT_PLUGIN_DIR=""
-if command -v qtpaths6 >/dev/null 2>&1; then
-  QT_PLUGIN_DIR="$(qtpaths6 --plugin-dir)"
-elif command -v qtpaths >/dev/null 2>&1; then
-  QT_PLUGIN_DIR="$(qtpaths --plugin-dir)"
+if command -v qmake6 >/dev/null 2>&1; then
+  QT_PLUGIN_DIR="$(qmake6 -query QT_INSTALL_PLUGINS 2>/dev/null || true)"
+fi
+if [[ -z "$QT_PLUGIN_DIR" ]] && command -v qtpaths6 >/dev/null 2>&1; then
+  QT_PLUGIN_DIR="$(qtpaths6 --plugin-dir 2>/dev/null || true)"
+fi
+if [[ -z "$QT_PLUGIN_DIR" ]] && command -v qtpaths >/dev/null 2>&1; then
+  QT_PLUGIN_DIR="$(qtpaths --qt-version 6 --plugin-dir 2>/dev/null || true)"
+fi
+if [[ -z "$QT_PLUGIN_DIR" ]] && command -v dpkg-architecture >/dev/null 2>&1; then
+  multiarch="$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || true)"
+  for candidate in \
+    "/usr/lib/${multiarch}/qt6/plugins" \
+    "/usr/lib/qt6/plugins" \
+    "/usr/lib64/qt6/plugins"; do
+    if [[ -n "$multiarch" && -d "$candidate" ]] || [[ -d "$candidate" ]]; then
+      QT_PLUGIN_DIR="$candidate"
+      break
+    fi
+  done
 fi
 if [[ -z "$QT_PLUGIN_DIR" || ! -d "$QT_PLUGIN_DIR" ]]; then
-  echo "Qt plugin directory could not be discovered" >&2
+  echo "Qt 6 plugin directory could not be discovered" >&2
+  echo "Tried qmake6, qtpaths6, qtpaths --qt-version 6, and standard distro paths." >&2
   exit 1
 fi
+
+echo "Qt plugin directory: $QT_PLUGIN_DIR"
 
 # Keep the SDK runtime intentionally small and predictable. Bezel needs a real
 # desktop backend plus the offscreen backend used by tests/rendering. Common
