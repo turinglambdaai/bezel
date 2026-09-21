@@ -11,43 +11,60 @@
          dial-set-notch-target)
 
 (require ffi/unsafe
-         racket/string
          "../private/ctypes.rkt"
          "../private/errors.rkt"
+         "../private/lib.rkt"
+         "../private/marshal.rkt"
          "../private/objects.rkt"
-         "../private/lib.rkt")
+         (only-in "../private/raw.rkt" bezel-free))
 
-;; Each binding: raw:<kebab> looks up the snake_case C symbol; the
-;; public wrapper below is named <kebab>.
+;; Direct FFI procedures are private to this generated module. Every
+;; public operation enters them through `gui`, matching handwritten
+;; Bezel bindings and preserving free-threaded public semantics.
 
-(define raw:dial-new (get-ffi-obj 'dial_new bezel-lib (_fun _bezel-handle -> _bezel-handle)))
+(define ffi:dial-new (get-ffi-obj 'dial_new bezel-lib (_fun _bezel-handle -> _bezel-handle)))
 (define (dial-new [v0 #f])
   (require-application)
-  (wrap-handle (ok-handle 'dial-new (raw:dial-new (and v0 (ptr-of v0))))
+  (when v0 (require-alive! 'dial-new v0))
+  (define ptr
+    (gui (lambda () (ffi:dial-new (and v0 (ptr-of v0))))))
+  (wrap-handle (ok-handle 'dial-new ptr)
                'widget (not v0)))
 
-(define raw:dial-set-value (get-ffi-obj 'dial_set_value bezel-lib (_fun _bezel-handle _int -> _int)))
+(define ffi:dial-set-value (get-ffi-obj 'dial_set_value bezel-lib (_fun _bezel-handle _int -> _int)))
 (define (dial-set-value o v0)
   (require-alive! 'dial-set-value o)
-  (ok! 'dial-set-value (raw:dial-set-value(ptr-of o) v0)))
+  (define r
+    (gui (lambda () (ffi:dial-set-value (ptr-of o) v0))))
+  (ok! 'dial-set-value r))
 
-(define raw:dial-value (get-ffi-obj 'dial_value bezel-lib (_fun _bezel-handle -> _int)))
+(define ffi:dial-value (get-ffi-obj 'dial_value bezel-lib (_fun _bezel-handle -> _int)))
 (define (dial-value o)
   (require-alive! 'dial-value o)
-  (raw:dial-value(ptr-of o)))
+  (define r
+    (gui (lambda () (ffi:dial-value (ptr-of o)))))
+  (when (and (= r -1) (last-error))
+    (raise-bezel-error 'dial-value))
+  r)
 
-(define raw:dial-set-range (get-ffi-obj 'dial_set_range bezel-lib (_fun _bezel-handle _int _int -> _int)))
+(define ffi:dial-set-range (get-ffi-obj 'dial_set_range bezel-lib (_fun _bezel-handle _int _int -> _int)))
 (define (dial-set-range o v0 v1)
   (require-alive! 'dial-set-range o)
-  (ok! 'dial-set-range (raw:dial-set-range(ptr-of o) v0 v1)))
+  (define r
+    (gui (lambda () (ffi:dial-set-range (ptr-of o) v0 v1))))
+  (ok! 'dial-set-range r))
 
-(define raw:dial-set-wrapping (get-ffi-obj 'dial_set_wrapping bezel-lib (_fun _bezel-handle _int -> _int)))
+(define ffi:dial-set-wrapping (get-ffi-obj 'dial_set_wrapping bezel-lib (_fun _bezel-handle _int -> _int)))
 (define (dial-set-wrapping o v0)
   (require-alive! 'dial-set-wrapping o)
-  (ok! 'dial-set-wrapping (raw:dial-set-wrapping(ptr-of o) (if v0 1 0))))
+  (define r
+    (gui (lambda () (ffi:dial-set-wrapping (ptr-of o) (if v0 1 0)))))
+  (ok! 'dial-set-wrapping r))
 
-(define raw:dial-set-notch-target (get-ffi-obj 'dial_set_notch_target bezel-lib (_fun _bezel-handle _double -> _int)))
+(define ffi:dial-set-notch-target (get-ffi-obj 'dial_set_notch_target bezel-lib (_fun _bezel-handle _double -> _int)))
 (define (dial-set-notch-target o v0)
   (require-alive! 'dial-set-notch-target o)
-  (ok! 'dial-set-notch-target (raw:dial-set-notch-target(ptr-of o) v0)))
+  (define r
+    (gui (lambda () (ffi:dial-set-notch-target (ptr-of o) v0))))
+  (ok! 'dial-set-notch-target r))
 
