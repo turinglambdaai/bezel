@@ -92,7 +92,7 @@ jobs:
     name: Build release package (${{ matrix.platform }})
     needs: [metadata, redistribution-policy, compliance]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -128,13 +128,43 @@ jobs:
           version: '8.12'
           architecture: ${{ matrix.racket-arch }}
 
-      - name: Install Linux packaging prerequisites
+      - name: Install Linux source-build prerequisites
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-dev patchelf
+          sudo apt-get install -y \
+            build-essential cmake ninja-build python3 curl patchelf \
+            libgl1-mesa-dev libegl1-mesa-dev libfontconfig1-dev libfreetype6-dev \
+            libx11-dev libx11-xcb-dev libxcb1-dev libxcb-cursor-dev \
+            libxcb-glx0-dev libxcb-icccm4-dev libxcb-image0-dev \
+            libxcb-keysyms1-dev libxcb-randr0-dev libxcb-render-util0-dev \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-shm0-dev \
+            libxcb-sync-dev libxcb-util-dev libxcb-xfixes0-dev \
+            libxcb-xinerama0-dev libxcb-xkb-dev libxkbcommon-dev \
+            libxkbcommon-x11-dev libdbus-1-dev
 
-      - name: Install exact QtBase
+      - name: Restore pinned Linux Qt build cache
+        if: runner.os == 'Linux'
+        uses: actions/cache@v4
+        with:
+          path: .qt-linux/6.8.3
+          key: bezel-qt-linux-6.8.3-noicu-bundled-56001b905601bb90-v1
+
+      - name: Build exact QtBase source (Linux)
+        if: runner.os == 'Linux'
+        run: bash scripts/build-pinned-qt-linux.sh "$GITHUB_WORKSPACE/.qt-linux/6.8.3" "$GITHUB_WORKSPACE/.qt-linux-build" "$GITHUB_WORKSPACE/dist/compliance/source/qtbase-everywhere-src-6.8.3.tar.xz"
+
+      - name: Export pinned Linux Qt
+        if: runner.os == 'Linux'
+        run: |
+          echo "$GITHUB_WORKSPACE/.qt-linux/6.8.3/bin" >> "$GITHUB_PATH"
+          echo "CMAKE_PREFIX_PATH=$GITHUB_WORKSPACE/.qt-linux/6.8.3" >> "$GITHUB_ENV"
+          echo "QT_ROOT_DIR=$GITHUB_WORKSPACE/.qt-linux/6.8.3" >> "$GITHUB_ENV"
+          echo "QT_PLUGIN_PATH=$GITHUB_WORKSPACE/.qt-linux/6.8.3/plugins" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/.qt-linux/6.8.3/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+
+      - name: Install exact QtBase (Windows/macOS)
+        if: runner.os != 'Linux'
         uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
         with:
           version: ${{ env.BEZEL_QT_VERSION }}
@@ -289,6 +319,7 @@ jobs:
             echo "Qt redistribution mode: LGPLv3"
             echo "Qt version: $BEZEL_QT_VERSION"
             echo "Linkage: dynamic"
+            echo "Linux Qt build: exact source, shared, ICU disabled, bundled QtBase third-party libraries"
             echo "QtBase source asset: qtbase-everywhere-src-6.8.3.tar.xz"
             echo "QtBase source SHA-256: 56001b905601bb9023d399f3ba780d7fa940f3e4861e496a7c490331f49e0b80"
             echo "Public workflow commercial-Qt publication: prohibited"
