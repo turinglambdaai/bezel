@@ -8,15 +8,24 @@
 (define-runtime-path script-dir ".")
 (define root (simplify-path (build-path script-dir 'up) #f))
 
-(define (pkg-version relative)
-  (dynamic-require (build-path root relative "info.rkt") 'version))
-
 (define (capture-version who rx path)
-  (define text (file->string (build-path root path)))
+  (define full-path (build-path root path))
+  (define text (file->string full-path))
   (define m (regexp-match rx text))
   (unless (and m (pair? (cdr m)))
-    (error 'check-version "could not read ~a version from ~a" who path))
+    (error 'check-version "could not read ~a version from ~a" who full-path))
   (cadr m))
+
+;; #lang info bindings are metadata consumed by Racket's setup tools; they are
+;; not ordinary module exports and therefore cannot be read with dynamic-require.
+;; Parse the tiny, intentionally stable version declaration instead.
+(define package-version-rx
+  #px"[(]define +version +\"([0-9]+[.][0-9]+[.][0-9]+)\"[)]")
+
+(define (pkg-version relative)
+  (capture-version relative
+                   package-version-rx
+                   (build-path relative "info.rkt")))
 
 (define lib-version (pkg-version "bezel-lib"))
 (define umbrella-version (pkg-version "bezel"))
