@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "qt_version": "6.8.3",
+  "qt_module": "qtbase",
+  "source_archive": "qtbase-everywhere-src-6.8.3.tar.xz",
+  "source_url": "https://download.qt.io/official_releases/qt/6.8/6.8.3/submodules/qtbase-everywhere-src-6.8.3.tar.xz",
+  "source_sha256": "56001b905601bb9023d399f3ba780d7fa940f3e4861e496a7c490331f49e0b80",
+  "public_release_license_mode": "lgpl",
+  "public_release_linkage": "dynamic",
+  "public_workflow_may_publish_commercial_qt": false,
+  "bundle_linux_system_libraries": false,
+  "bundle_windows_msvc_runtime": false,
+  "qt_components": [
+    "QtCore",
+    "QtGui",
+    "QtWidgets",
+    "platform plugins required by the supported desktop target",
+    "offscreen platform plugin",
+    "selected QtBase image format plugins"
+  ]
+}
