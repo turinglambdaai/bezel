@@ -56,11 +56,27 @@ names follow @tt{make-widget} / @tt{widget-set-text!} conventions:
  @item{Lifecycle: @racket[make-application], @racket[run], @racket[quit!],
        @racket[process-events!], @racket[bezel-cleanup!]}
  @item{Widgets: @racket[make-window], @racket[make-label], @racket[make-button],
-       @racket[make-line-edit], @racket[make-combo], @racket[make-slider], ...}
+       @racket[make-line-edit], @racket[make-combo], @racket[make-slider],
+       @racket[make-table-widget], ... — every constructor also accepts
+       @racket[#:parent]}
+ @item{Generator-backed classes: @racket[radio-new], @racket[groupbox-new],
+       @racket[doublespin-new], @racket[lcd-new], @racket[tabs-new],
+       @racket[stacked-new], @racket[splitter-new], @racket[richtext-new]}
  @item{Layouts: @racket[layout!], @racket[vbox], @racket[hbox], @racket[grid],
        @racket[form], @racket[stretch]}
  @item{Signals: @racket[connect!], @racket[disconnect!],
        @racket[emit-test-signal!]}
+ @item{Timers: @racket[after!], @racket[every!], @racket[stop-timer!]}
+ @item{Dialogs: @racket[msg-question], @racket[get-open-file-name],
+       @racket[get-save-file-name]}
  @item{Object model: @racket[bezel-alive?], @racket[bezel-delete!],
        @racket[qt-object-name]}
  @item{Verification: @racket[widget-grab-png] — real PNG bytes of any widget}]
+
+@section{Packaging applications}
+
+@commandline{raco bezel package --entry my-app.rkt --name MyApp --dest dist}
+
+produces a self-contained application folder (embedded executable plus
+bundled native runtime). Signing helpers for Windows and macOS and the
+full walkthrough live in @tt{docs/APP_PACKAGING.md}.

@@ -1,0 +1,15 @@
+{
+  "class": "QRadioButton",
+  "module": "radio",
+  "header": "QRadioButton",
+  "constructors": [
+    { "c-name": "radio-new", "args": ["string", "parent"] }
+  ],
+  "methods": [
+    { "c-name": "radio-set-text",      "qt": "setText",    "args": ["string"] },
+    { "c-name": "radio-text",          "qt": "text",       "ret": "string" },
+    { "c-name": "radio-set-checked",   "qt": "setChecked", "args": ["bool"] },
+    { "c-name": "radio-is-checked",    "qt": "isChecked",  "ret": "bool" }
+  ],
+  "signals": ["toggled(bool)"]
+}

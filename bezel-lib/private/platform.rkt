@@ -29,10 +29,21 @@
        (not (string=? value ""))
        (simple-form-path value)))
 
+;; Directory of the running executable. For a `raco exe` distribution
+;; this is the shipped application folder, so <exe-dir>/native/<os>-<arch>
+;; is how packaged applications find their bundled runtime. During
+;; ordinary development it is the Racket installation directory, where
+;; no native/ bundle exists — a harmless extra candidate.
+(define (executable-directory)
+  (define exe (find-executable-path (find-system-path 'exec-file)))
+  (and exe (path-only exe)))
+
 (define bezel-native-search-roots
   (filter values
           (list (directory-env "BEZEL_NATIVE_DIR")
-                (build-path bezel-lib-root "native" bezel-platform-key))))
+                (build-path bezel-lib-root "native" bezel-platform-key)
+                (and (executable-directory)
+                     (build-path (executable-directory) "native" bezel-platform-key)))))
 
 (define (root-library-candidates root)
   (append

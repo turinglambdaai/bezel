@@ -2,7 +2,9 @@
 
 (require racket/format
          racket/list
+         racket/match
          racket/path
+         racket/string
          "private/platform.rkt")
 
 (define (env-display name)
@@ -42,10 +44,51 @@
     (displayln (format "  selected shim: ~a" loaded-path))
     (displayln (format "  hermetic packaged-runtime mode: ~a" (if strict? "enabled" "disabled")))))
 
+;; ---- raco bezel package -----------------------------------------------------
+;;
+;; Build a self-contained application folder from an entry module:
+;; embedded executable + bundled native runtime. See private/pack.rkt.
+
+(define package-usage
+  (string-append
+   "usage: raco bezel package --entry <module.rkt> --name <AppName>\n"
+   "                      [--dest <dir>] [--runtime-dir <dir>]\n"))
+
+(define (parse-package-flags args)
+  (let loop ([args args] [flags '()])
+    (match args
+      [(list) (reverse flags)]
+      [(list flag value rest ...)
+       (match flag
+         [(or "--entry" "--name" "--dest" "--runtime-dir")
+          (loop rest (cons (cons (string->symbol (string-trim flag "-")) value) flags))]
+         [_ (raise-user-error 'bezel/package "unknown flag: ~a\n~a" flag package-usage)])]
+      [_ (raise-user-error 'bezel/package "flag ~a needs a value\n~a" (car args) package-usage)])))
+
+(define (flag-ref flags key [default #f])
+  (cond [(assq key flags) => cdr] [else default]))
+
+(define (package-command args)
+  (unless (pair? args)
+    (raise-user-error 'bezel/package package-usage))
+  (define flags (parse-package-flags args))
+  (define entry (flag-ref flags 'entry))
+  (define name (flag-ref flags 'name))
+  (unless entry (raise-user-error 'bezel/package "--entry is required\n~a" package-usage))
+  (unless name (raise-user-error 'bezel/package "--name is required\n~a" package-usage))
+  ((dynamic-require 'bezel/private/pack 'package-app!)
+   #:entry entry
+   #:name name
+   #:dest (flag-ref flags 'dest "dist")
+   #:runtime-dir (and (flag-ref flags 'runtime-dir)
+                      (path->complete-path (flag-ref flags 'runtime-dir)))))
+
 (define args (vector->list (current-command-line-arguments)))
 (cond
   [(or (null? args) (equal? args '("doctor")))
    (doctor)]
+  [(equal? (car args) "package")
+   (package-command (cdr args))]
   [else
-   (eprintf "usage: raco bezel [doctor]\n")
+   (eprintf "usage: raco bezel [doctor | package ...]\n")
    (exit 2)])

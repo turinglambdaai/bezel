@@ -34,6 +34,7 @@
     ["int"    "int"]
     ["double" "double"]
     ["bool"   "int"]
+    ["orientation" "int"]
     [_ (error 'generate "unsupported argument type: ~a" t)]))
 
 (define (cpp-ret t)
@@ -52,6 +53,8 @@
     ["int"    "_int"]
     ["double" "_double"]
     ["bool"   "_int"]
+    ;; C-facing int, Qt-facing Qt::Orientation (1 = horizontal, 2 = vertical)
+    ["orientation" "_int"]
     [_ (error 'generate "unsupported argument type: ~a" t)]))
 
 (define (cpp-pass t i)
@@ -60,6 +63,7 @@
     ["bool"   (format "(in~a != 0)" i)]
     ["parent" (format "parent~a" i)]
     ["widget" (format "widget~a" i)]
+    ["orientation" (format "static_cast<Qt::Orientation>(in~a)" i)]
     [_        (format "in~a" i)]))
 
 (define (rkt-pass t i)

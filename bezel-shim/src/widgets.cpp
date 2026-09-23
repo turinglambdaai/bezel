@@ -10,9 +10,11 @@
 #include <QBuffer>
 
 #include <cstdlib>
+#include <QAction>
 #include <QByteArray>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -21,8 +23,11 @@
 #include <QPlainTextEdit>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QScreen>
 #include <QSlider>
 #include <QSpinBox>
+#include <QTableWidget>
+#include <QTableWidgetItem>
 #include <QWidget>
 
 namespace {
@@ -236,6 +241,156 @@ BEZEL_EXPORT const unsigned char* bezel_widget_grab_png(bezel_handle h, int* len
         std::memcpy(copy, png.constData(), n);
         *len_out = static_cast<int>(n);
         return static_cast<const unsigned char*>(copy);
+    });
+}
+
+// ---- tooltips / geometry -------------------------------------------------
+
+BEZEL_EXPORT int bezel_widget_set_tooltip(bezel_handle h, const char* text) {
+    return on_gui([h, text]() -> int {
+        QWidget* w = resolve_widget(h, "bezel_widget_set_tooltip");
+        if (!w) return 0;
+        w->setToolTip(QString::fromUtf8(text ? text : ""));
+        return 1;
+    });
+}
+
+BEZEL_EXPORT const char* bezel_widget_tooltip(bezel_handle h) {
+    return on_gui([h]() -> const char* {
+        QWidget* w = resolve_widget(h, "bezel_widget_tooltip");
+        return w ? strdup_q(w->toolTip()) : nullptr;
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_width(bezel_handle h) {
+    return on_gui([h]() -> int {
+        QWidget* w = resolve_widget(h, "bezel_widget_width");
+        return w ? w->width() : -1;
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_height(bezel_handle h) {
+    return on_gui([h]() -> int {
+        QWidget* w = resolve_widget(h, "bezel_widget_height");
+        return w ? w->height() : -1;
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_x(bezel_handle h) {
+    return on_gui([h]() -> int {
+        QWidget* w = resolve_widget(h, "bezel_widget_x");
+        return w ? w->x() : -1;
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_y(bezel_handle h) {
+    return on_gui([h]() -> int {
+        QWidget* w = resolve_widget(h, "bezel_widget_y");
+        return w ? w->y() : -1;
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_center(bezel_handle h) {
+    return on_gui([h]() -> int {
+        QWidget* w = resolve_widget(h, "bezel_widget_center");
+        if (!w) return 0;
+        if (QWidget* p = w->parentWidget()) {
+            w->move((p->width() - w->width()) / 2, (p->height() - w->height()) / 2);
+        } else if (QScreen* s = w->screen()) {
+            const QRect g = s->availableGeometry();
+            w->move(g.center().x() - w->width() / 2, g.center().y() - w->height() / 2);
+        } else {
+            set_error("bezel_widget_center: no screen for handle %p", h);
+            return 0;
+        }
+        return 1;
+    });
+}
+
+// ---- table widget ----------------------------------------------------------
+
+BEZEL_EXPORT bezel_handle bezel_table_new(bezel_handle parent) {
+    return on_gui([parent]() -> bezel_handle {
+        QWidget* p = parent ? resolve_widget(parent, "bezel_table_new") : nullptr;
+        if (parent && !p) return nullptr;
+        return register_object(new QTableWidget(p));
+    });
+}
+
+BEZEL_EXPORT int bezel_table_set_dimensions(bezel_handle h, int rows, int cols) {
+    return on_gui([h, rows, cols]() -> int {
+        QTableWidget* t = resolve_as<QTableWidget>(h, "bezel_table_set_dimensions");
+        if (!t) return 0;
+        t->setRowCount(rows);
+        t->setColumnCount(cols);
+        return 1;
+    });
+}
+
+BEZEL_EXPORT int bezel_table_row_count(bezel_handle h) {
+    return on_gui([h]() -> int {
+        QTableWidget* t = resolve_as<QTableWidget>(h, "bezel_table_row_count");
+        return t ? t->rowCount() : -1;
+    });
+}
+
+BEZEL_EXPORT int bezel_table_column_count(bezel_handle h) {
+    return on_gui([h]() -> int {
+        QTableWidget* t = resolve_as<QTableWidget>(h, "bezel_table_column_count");
+        return t ? t->columnCount() : -1;
+    });
+}
+
+BEZEL_EXPORT int bezel_table_set_header_labels(bezel_handle h, const char* labels) {
+    return on_gui([h, labels]() -> int {
+        QTableWidget* t = resolve_as<QTableWidget>(h, "bezel_table_set_header_labels");
+        if (!t) return 0;
+        // '\n'-separated labels follow Qt's own setHorizontalHeaderLabels
+        // input convention (QAbstractItemModel::setHorizontalHeaderLabels).
+        t->setHorizontalHeaderLabels(
+            QString::fromUtf8(labels ? labels : "").split(QLatin1Char('\n')));
+        return 1;
+    });
+}
+
+BEZEL_EXPORT int bezel_table_set_cell_text(bezel_handle h, int row, int col, const char* text) {
+    return on_gui([h, row, col, text]() -> int {
+        QTableWidget* t = resolve_as<QTableWidget>(h, "bezel_table_set_cell_text");
+        if (!t) return 0;
+        if (row < 0 || row >= t->rowCount() || col < 0 || col >= t->columnCount()) {
+            set_error("bezel_table_set_cell_text: cell (%d,%d) outside %dx%d table",
+                      row, col, t->rowCount(), t->columnCount());
+            return 0;
+        }
+        // The table owns the item (QTableWidgetItem has no parent pointer;
+        // the view deletes items it holds).
+        t->setItem(row, col, new QTableWidgetItem(QString::fromUtf8(text ? text : "")));
+        return 1;
+    });
+}
+
+BEZEL_EXPORT const char* bezel_table_cell_text(bezel_handle h, int row, int col) {
+    return on_gui([h, row, col]() -> const char* {
+        QTableWidget* t = resolve_as<QTableWidget>(h, "bezel_table_cell_text");
+        if (!t) return nullptr;
+        if (row < 0 || row >= t->rowCount() || col < 0 || col >= t->columnCount()) {
+            set_error("bezel_table_cell_text: cell (%d,%d) outside %dx%d table",
+                      row, col, t->rowCount(), t->columnCount());
+            return nullptr;
+        }
+        QTableWidgetItem* item = t->item(row, col);
+        return strdup_q(item ? item->text() : QString());
+    });
+}
+
+// ---- action shortcut --------------------------------------------------------
+
+BEZEL_EXPORT int bezel_action_set_shortcut(bezel_handle h, const char* key) {
+    return on_gui([h, key]() -> int {
+        QAction* a = resolve_as<QAction>(h, "bezel_action_set_shortcut");
+        if (!a) return 0;
+        a->setShortcut(QKeySequence(QString::fromUtf8(key ? key : "")));
+        return 1;
     });
 }
 

@@ -287,6 +287,21 @@ jobs:
           BEZEL_REQUIRE_PACKAGED_RUNTIME: '1'
         run: racket scripts/native-smoke.rkt
 
+      - name: Package a demo application
+        run: raco bezel package --entry scripts/app-smoke.rkt --name bezel-demo --dest app-dist
+
+      - name: Run the packaged application headlessly
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          exe=./app-dist/bezel-demo/bezel-demo
+          if [[ "${{ runner.os }}" == "Windows" ]]; then exe=$exe.exe; fi
+          "$exe"
+          code=$?
+          echo "packaged app exit code: $code"
+          exit $code
+
   docs:
     runs-on: ubuntu-latest
     timeout-minutes: 10

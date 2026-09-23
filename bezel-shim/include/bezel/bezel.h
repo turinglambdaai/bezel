@@ -157,6 +157,21 @@ BEZEL_EXPORT int bezel_widget_set_stylesheet(bezel_handle h, const char* qss);
  * failure. */
 BEZEL_EXPORT const unsigned char* bezel_widget_grab_png(bezel_handle h, int* len_out);
 
+/* Tooltips (any widget). */
+BEZEL_EXPORT int bezel_widget_set_tooltip(bezel_handle h, const char* text);
+BEZEL_EXPORT const char* bezel_widget_tooltip(bezel_handle h);
+
+/* Geometry readers return -1 with an error on bezel_last_error when the
+ * handle is dead or unknown. */
+BEZEL_EXPORT int bezel_widget_width(bezel_handle h);
+BEZEL_EXPORT int bezel_widget_height(bezel_handle h);
+BEZEL_EXPORT int bezel_widget_x(bezel_handle h);
+BEZEL_EXPORT int bezel_widget_y(bezel_handle h);
+
+/* Center the widget inside its parent, or on its screen when it is
+ * top-level. */
+BEZEL_EXPORT int bezel_widget_center(bezel_handle h);
+
 /* ------------------------------------------------------------------ */
 /* Widgets — value API (text / checked / int value)                    */
 /* ------------------------------------------------------------------ */
@@ -188,6 +203,16 @@ BEZEL_EXPORT const char* bezel_list_current_text(bezel_handle h);
 /* Line edit / text edit placeholder + read-only flag. */
 BEZEL_EXPORT int bezel_widget_set_placeholder(bezel_handle h, const char* text);
 BEZEL_EXPORT int bezel_widget_set_readonly(bezel_handle h, int readonly);
+
+/* Table widget (QTableWidget). `labels` is one '\n'-separated string
+ * (Qt's own convention) naming the horizontal headers. */
+BEZEL_EXPORT bezel_handle bezel_table_new(bezel_handle parent);
+BEZEL_EXPORT int bezel_table_set_dimensions(bezel_handle h, int rows, int cols);
+BEZEL_EXPORT int bezel_table_row_count(bezel_handle h);
+BEZEL_EXPORT int bezel_table_column_count(bezel_handle h);
+BEZEL_EXPORT int bezel_table_set_header_labels(bezel_handle h, const char* labels);
+BEZEL_EXPORT int bezel_table_set_cell_text(bezel_handle h, int row, int col, const char* text);
+BEZEL_EXPORT const char* bezel_table_cell_text(bezel_handle h, int row, int col);
 
 /* ------------------------------------------------------------------ */
 /* Layouts                                                             */
@@ -224,6 +249,10 @@ BEZEL_EXPORT bezel_handle bezel_menu_add(bezel_handle parent, const char* title)
 BEZEL_EXPORT bezel_handle bezel_menu_action(bezel_handle menu, const char* text);
 BEZEL_EXPORT bezel_handle bezel_menu_separator(bezel_handle menu);
 
+/* Keyboard shortcut for a menu action, e.g. "Ctrl+Q" / "Ctrl+S".
+ * QKeySequence text; empty string clears the shortcut. */
+BEZEL_EXPORT int bezel_action_set_shortcut(bezel_handle action, const char* key);
+
 /* ------------------------------------------------------------------ */
 /* Dialogs — modal conveniences                                        */
 /* ------------------------------------------------------------------ */
@@ -231,6 +260,18 @@ BEZEL_EXPORT bezel_handle bezel_menu_separator(bezel_handle menu);
 BEZEL_EXPORT int bezel_msg_information(bezel_handle parent, const char* title, const char* text);
 BEZEL_EXPORT int bezel_msg_warning(bezel_handle parent, const char* title, const char* text);
 BEZEL_EXPORT int bezel_msg_question(bezel_handle parent, const char* title, const char* text);
+
+/* Native file dialogs. Like the msg-* family these run a nested (modal)
+ * Qt event loop; call them from a handler or the main thread. `parent`
+ * may be NULL. `caption`, `dir`, and `filter` may be NULL or empty
+ * ("" = Qt defaults; filter example "Images (*.png *.jpg);;All (*)").
+ * Returns a bezel_free-able UTF-8 path, or the empty string when the
+ * user cancels. Returns NULL (with bezel_last_error set) only when the
+ * parent handle is invalid. */
+BEZEL_EXPORT const char* bezel_get_open_file_name(bezel_handle parent, const char* caption,
+                                                  const char* dir, const char* filter);
+BEZEL_EXPORT const char* bezel_get_save_file_name(bezel_handle parent, const char* caption,
+                                                  const char* dir, const char* filter);
 
 /* ------------------------------------------------------------------ */
 /* Signals                                                             */

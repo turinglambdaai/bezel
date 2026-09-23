@@ -89,6 +89,7 @@
 (define-bezel bezel-slider-new (_fun _int _bezel-handle -> _bezel-handle))
 (define-bezel bezel-progress-new (_fun _bezel-handle -> _bezel-handle))
 (define-bezel bezel-list-new (_fun _bezel-handle -> _bezel-handle))
+(define-bezel bezel-table-new (_fun _bezel-handle -> _bezel-handle))
 
 ; ---- QWidget shared API ----------------------------------------------------------
 (define-bezel bezel-widget-show (_fun _bezel-handle -> _int))
@@ -103,6 +104,13 @@
 ;; (handle, int* len_out) -> PNG bytes pointer (caller frees via bezel-free).
 (define-bezel bezel-widget-grab-png
   (_fun _bezel-handle _pointer -> _pointer))
+(define-bezel bezel-widget-set-tooltip (_fun _bezel-handle _string/utf-8 -> _int))
+(define-bezel bezel-widget-tooltip (_fun _bezel-handle -> _pointer))
+(define-bezel bezel-widget-width (_fun _bezel-handle -> _int))
+(define-bezel bezel-widget-height (_fun _bezel-handle -> _int))
+(define-bezel bezel-widget-x (_fun _bezel-handle -> _int))
+(define-bezel bezel-widget-y (_fun _bezel-handle -> _int))
+(define-bezel bezel-widget-center (_fun _bezel-handle -> _int))
 
 ; ---- value API --------------------------------------------------------------------
 (define-bezel bezel-widget-set-text (_fun _bezel-handle _string/utf-8 -> _int))
@@ -122,6 +130,12 @@
 (define-bezel bezel-list-current-text (_fun _bezel-handle -> _pointer))
 (define-bezel bezel-widget-set-placeholder (_fun _bezel-handle _string/utf-8 -> _int))
 (define-bezel bezel-widget-set-readonly (_fun _bezel-handle _int -> _int))
+(define-bezel bezel-table-set-dimensions (_fun _bezel-handle _int _int -> _int))
+(define-bezel bezel-table-row-count (_fun _bezel-handle -> _int))
+(define-bezel bezel-table-column-count (_fun _bezel-handle -> _int))
+(define-bezel bezel-table-set-header-labels (_fun _bezel-handle _string/utf-8 -> _int))
+(define-bezel bezel-table-set-cell-text (_fun _bezel-handle _int _int _string/utf-8 -> _int))
+(define-bezel bezel-table-cell-text (_fun _bezel-handle _int _int -> _pointer))
 
 ; ---- layouts ------------------------------------------------------------------------
 (define-bezel bezel-vbox-new (_fun -> _bezel-handle))
@@ -144,11 +158,16 @@
 (define-bezel bezel-menu-add (_fun _bezel-handle _string/utf-8 -> _bezel-handle))
 (define-bezel bezel-menu-action (_fun _bezel-handle _string/utf-8 -> _bezel-handle))
 (define-bezel bezel-menu-separator (_fun _bezel-handle -> _bezel-handle))
+(define-bezel bezel-action-set-shortcut (_fun _bezel-handle _string/utf-8 -> _int))
 
 ; ---- dialogs ----------------------------------------------------------------------------
 (define-bezel bezel-msg-information (_fun _bezel-handle _string/utf-8 _string/utf-8 -> _int))
 (define-bezel bezel-msg-warning (_fun _bezel-handle _string/utf-8 _string/utf-8 -> _int))
 (define-bezel bezel-msg-question (_fun _bezel-handle _string/utf-8 _string/utf-8 -> _int))
+(define-bezel bezel-get-open-file-name
+  (_fun _bezel-handle _string/utf-8 _string/utf-8 _string/utf-8 -> _pointer))
+(define-bezel bezel-get-save-file-name
+  (_fun _bezel-handle _string/utf-8 _string/utf-8 _string/utf-8 -> _pointer))
 
 ; ---- signals --------------------------------------------------------------------------------
 (define-bezel bezel-connect (_fun _bezel-handle _string/utf-8 -> _int64))

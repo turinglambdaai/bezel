@@ -2,7 +2,7 @@
 
 ;; Menus: menu-bar on a window, menus (and submenus), actions.
 
-(provide menu-bar menu! menu-action! menu-separator!)
+(provide menu-bar menu! menu-action! menu-separator! set-action-shortcut!)
 
 (require "private/errors.rkt"
          "private/objects.rkt"
@@ -29,3 +29,9 @@
   (require-alive! 'menu-separator! menu)
   (bezel-menu-separator (ptr-of menu))
   (void))
+
+;; Keyboard shortcut for a menu action, e.g. "Ctrl+Q" (QKeySequence
+;; text). An empty string clears the shortcut.
+(define (set-action-shortcut! action key)
+  (require-alive! 'set-action-shortcut! action)
+  (ok! 'set-action-shortcut! (bezel-action-set-shortcut (ptr-of action) key)))

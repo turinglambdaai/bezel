@@ -2,7 +2,7 @@
 
 用 [Racket](https://racket-lang.org/) 写原生 [Qt 6](https://www.qt.io/) 桌面应用。在 Windows、macOS、Linux 上使用真正的 Qt Widgets，同时保留 Racket 的开发体验。
 
-[![CI](https://github.com/turinglambdaai/bezel/actions/workflows/ci.yml/badge.svg)](https://github.com/turinglambdaai/bezel/actions/workflows/ci.yml) ![Racket](https://img.shields.io/badge/Racket-9F1D20?logo=racket&logoColor=white) ![Qt6](https://img.shields.io/badge/Qt_6-41CD52?logo=qt&logoColor=white) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![Release](https://img.shields.io/badge/release-0.2.0-C15F3C)](CHANGELOG.md)
+[![CI](https://github.com/turinglambdaai/bezel/actions/workflows/ci.yml/badge.svg)](https://github.com/turinglambdaai/bezel/actions/workflows/ci.yml) ![Racket](https://img.shields.io/badge/Racket-9F1D20?logo=racket&logoColor=white) ![Qt6](https://img.shields.io/badge/Qt_6-41CD52?logo=qt&logoColor=white) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![Release](https://img.shields.io/badge/release-0.3.0-C15F3C)](CHANGELOG.md)
 
 [English](README.md) · **中文**
 
@@ -12,12 +12,14 @@ Racket 自带的 `racket/gui` 可以完成桌面开发，但要做现代、统�
 
 你将得到：
 
-- **真 Qt 控件** —— 窗口、按钮、输入框、列表、滑条、菜单、对话框、布局，并通过生成器继续扩展。
+- **真 Qt 控件** —— 窗口、按钮、输入框、列表、滑条、表格、标签页、分割器、分组框、表盘、LCD 数字、菜单、对话框、布局，并通过生成器继续扩展。
 - **QSS 样式** —— 使用 Qt 的 CSS 风格系统构建商业界面。
 - **明确的线程语义** —— 公开控件 API 可以从任意 Racket 线程发起，自动编组到 GUI 线程。
+- **定时器** —— `after!` / `every!` 在自己的 Racket 线程里调度代码，内部控件调用安全编组到 GUI 线程。
 - **Agent 友好的验证能力** —— `widget-grab-png` 可渲染真实控件；CI 使用 Qt offscreen 后端做无头真对象测试。
 - **受检查的 native 边界** —— 加载时验证 shim ABI，尽早发现 Racket 绑定与 native 库版本不匹配。
 - **便携发行包** —— 支持的平台会把 `libbezel`、Qt runtime 和 Qt plugins 一起打进 Racket 包；最终用户不需要安装 Qt、CMake 或 C++ 编译器。
+- **最终应用打包** —— `raco bezel package` 把入口模块变成自包含的「可执行文件 + runtime」目录，并附带 Windows/macOS 签名辅助脚本。
 - **运行环境诊断** —— `raco bezel doctor` 会报告平台、架构、native 搜索路径、环境变量和 ABI 加载状态。
 
 <p align="center"><img src="docs/showcase.png" alt="Bezel Showcase —— Racket 写就的真 Qt 界面" width="720"></p>
@@ -105,12 +107,17 @@ Bezel 有意把 native 边界控制得很小：
 | 类型化信号（`bool` / `int` / `double` / `QString`） | ✅ | ✅ | ✅ |
 | 跨线程公开控件访问 | ✅ | ✅ | ✅ |
 | 生成绑定的线程编组 | ✅ | ✅ | ✅ |
+| 生成器类（tabs/stacked/splitter/dial/…） | ✅ | ✅ | ✅ |
+| 表格控件 + 富文本编辑 | ✅ | ✅ | ✅ |
+| 定时器（`after!` / `every!`） | ✅ | ✅ | ✅ |
+| 原生文件对话框 | ✅ | ✅ | ✅ |
 | QSS 样式 | ✅ | ✅ | ✅ |
 | `widget-grab-png` | ✅ | ✅ | ✅ |
 | 无头真对象 CI | ✅ | ✅ | ✅ |
 | 自包含发布包 | Apple Silicon | x86_64 | x86_64 |
+| `raco bezel package` 应用打包 | ✅ | ✅ | ✅ |
 
-暂不支持的 Qt signal 参数类型目前会退化为不带转换参数的投递。控件覆盖面当前仍是有意收敛的核心集合；扩展方向是 generator，而不是宣称已经覆盖整个 Qt。
+暂不支持的 Qt signal 参数类型目前会退化为不带转换参数的投递。控件覆盖面如今已相当广泛，但仍然是有意收敛的集合；扩展方向是 generator，而不是宣称已经覆盖整个 Qt。
 
 ## API 速览
 
@@ -140,7 +147,60 @@ Bezel 有意把 native 边界控制得很小：
                (hbox stretch (make-button "Submit"))))
 ```
 
-树形组合（`vbox`、`hbox`、`grid`、`form`、`stretch`）和命令式 layout builder 都可以使用。
+树形组合（`vbox`、`hbox`、`grid`、`form`、`stretch`）和命令式 layout builder 都可以使用。构造器的 parent 既可按位置传，也可用 `#:parent` 关键字：
+
+```racket
+(define page (make-widget #:parent win))
+```
+
+### 更广的控件覆盖
+
+生成器支持的类（`tools/generator/specs/`）：单选按钮、分组框、双精度数字框、LCD 数字、标签页、堆叠页、分割器、富文本编辑：
+
+```racket
+(define tabs (tabs-new))
+(tabs-add tabs (make-label "first page") "First")
+(tabs-add tabs (make-label "second page") "Second")
+(tabs-set-current-index tabs 1)
+
+(define sp (splitter-new))
+(splitter-add-widget sp editor)          ; 1/2 = 水平/垂直
+(splitter-set-orientation sp 2)
+
+(define html (richtext-new "<b>Hello</b>"))
+(richtext-set-html html "<i>styled</i>")
+```
+
+另有手写的 `QTableWidget`：
+
+```racket
+(define t (make-table-widget))
+(table-set-dimensions! t 2 3)
+(table-set-header-labels! t "Name
+Score
+Note")
+(table-set-cell-text! t 0 0 "Ada")
+(table-cell-text t 0 0)
+```
+
+### 定时器
+
+```racket
+(after! 500 (lambda () (widget-set-text! status "done")))
+(define clock (every! 100 (lambda () (widget-set-value! bar (tick)))))
+(stop-timer! clock)
+```
+
+Handler 运行在各自的 Racket 线程上；其中的控件调用会自动编组到 GUI 线程。
+
+### 对话框与快捷键
+
+```racket
+(msg-question "Delete 3 items?" #:parent win)
+(define path (get-open-file-name #:parent win #:filter "Images (*.png *.jpg);;All (*)"))
+(define act (menu-action! (menu! (menu-bar win) "File") "Quit"))
+(set-action-shortcut! act "Ctrl+Q")
+```
 
 ### 信号
 
@@ -183,8 +243,9 @@ Handler 运行在 Bezel dispatcher 线程上。Handler 中调用公开控件 API
 1. `BEZEL_LIBRARY` —— 显式指定的共享库文件。
 2. `BEZEL_NATIVE_DIR` —— 显式指定的解压 runtime 根目录。
 3. `bezel-lib/native/<os>-<arch>/` —— 正常自包含发布包使用的 package-local runtime。
-4. `bezel-shim/build` —— 源码 checkout 的开发便利路径。
-5. 操作系统正常动态库搜索路径。
+4. `<可执行文件目录>/native/<os>-<arch>/` —— `raco bezel package` 产出的应用目录。
+5. `bezel-shim/build` —— 源码 checkout 的开发便利路径。
+6. 操作系统正常动态库搜索路径。
 
 若发现随包携带的 Qt plugin 目录，而且应用没有主动设置 `QT_PLUGIN_PATH`，Bezel 会在构造 `QApplication` 前自动设置 package-local plugin path。
 
@@ -193,6 +254,17 @@ Native 加载遇到问题时直接运行：
 ```text
 raco bezel doctor
 ```
+
+## 打包你的应用
+
+`raco bezel package` 把入口模块变成可分发目录 —— 内嵌可执行文件 + 随包 native runtime；最终用户既不需要 Racket 也不需要 Qt：
+
+```bash
+raco bezel package --entry my-app.rkt --name MyApp --dest dist
+QT_QPA_PLATFORM=offscreen ./dist/MyApp/MyApp   # 无头验证
+```
+
+签名后即可分发：`scripts/sign-app-windows.ps1`（signtool 签名 + 时间戳 + 验证）与 `scripts/sign-app-macos.sh`（codesign hardened runtime，可选 notarization + staple）。完整流程（含 CI 在干净 runner 上直接执行打包产物的检查）见 [docs/APP_PACKAGING.md](docs/APP_PACKAGING.md)。
 
 ## 发布工程
 
@@ -223,7 +295,7 @@ bezel/
 ├── bezel-doc/        # Scribble 文档
 ├── bezel-test/       # 真对象无头测试
 ├── examples/         # hello / counter / form
-├── scripts/          # 打包、smoke、showcase、release 检查
+├── scripts/          # 打包、签名辅助、smoke、showcase、release 检查
 ├── tools/generator/  # JSON spec -> C++ + Racket bindings
 └── docs/             # 架构与商业发布说明
 ```
@@ -235,7 +307,7 @@ bezel/
 - [x] **Phase 3** —— 三平台真对象 CI、PNG 验证、showcase。
 - [x] **Phase 3.5** —— ABI guard、生命周期 hardening、生成绑定安全、可重复生成。
 - [x] **Phase 4** —— 可迁移 native runtime、自包含 Racket package、干净机器安装 smoke、受 gate 保护的 GitHub Release。
-- [ ] **Phase 5** —— 更广 Qt 类覆盖、更高层 API 易用性、最终应用打包/签名辅助工具。
+- [x] **Phase 5** —— 更广 Qt 类覆盖（单选/分组框/双精度数字框/LCD/标签页/堆叠页/分割器/富文本/表格）、更高层易用性（`#:parent`、定时器、tooltip、几何读取、快捷键、文件对话框）、最终应用打包与签名辅助（`raco bezel package` + 各平台签名脚本）。
 
 ## License
 

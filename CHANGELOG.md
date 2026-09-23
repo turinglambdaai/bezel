@@ -3,6 +3,48 @@
 All notable changes to Bezel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.3.0
+
+Phase 5 release: broader Qt class coverage, higher-level ergonomics, and
+final-application packaging/signing helpers.
+
+### Added
+
+- **Generator-produced widget classes** (specs in `tools/generator/specs/`):
+  `QRadioButton` (`radio-*`), `QGroupBox` (`groupbox-*`), `QDoubleSpinBox`
+  (`doublespin-*`), `QLCDNumber` (`lcd-*`), `QTabWidget` (`tabs-*`),
+  `QStackedWidget` (`stacked-*`), `QSplitter` (`splitter-*`), and rich-text
+  `QTextEdit` (`richtext-*`).
+- **QTableWidget** (`make-table-widget`, `table-set-dimensions!`,
+  `table-set-header-labels!`, `table-set-cell-text!`, `table-cell-text`,
+  row/column counts) with out-of-range cell errors.
+- **Timers**: `after!`, `every!`, `stop-timer!` — Racket-thread scheduling
+  that marshals widget calls to the GUI thread without owning the pump.
+- **Native file dialogs**: `get-open-file-name` / `get-save-file-name`
+  (modal, same contract as the `msg-*` family; `#f` on cancel).
+- **Widget extras**: tooltips (`set-tooltip!` / `widget-tooltip`),
+  geometry readers (`widget-width` / `widget-height` / `widget-x` /
+  `widget-y`), `center-widget!`, and menu-action keyboard shortcuts
+  (`set-action-shortcut!`, e.g. `"Ctrl+Q"`).
+- **Keyword parents**: every handwritten `make-*` constructor accepts
+  `#:parent` (passing both positional and keyword parents is an error).
+- **Generator `orientation` argument type** for enum-setters such as
+  `QSplitter::setOrientation` (C-facing int, Qt-facing cast).
+- **`raco bezel package`**: builds a self-contained application folder —
+  embedded executable plus `native/<os>-<arch>/` runtime — from an entry
+  module.
+- **Exe-relative runtime resolution**: the loader now also searches
+  `<executable-dir>/native/<os>-<arch>/`, which is how `raco bezel
+  package` output finds its runtime on end-user machines.
+- **Signing helpers**: `scripts/sign-app-windows.ps1` (signtool sign +
+  timestamp + verify) and `scripts/sign-app-macos.sh` (codesign hardened
+  runtime, optional notarytool submit + staple).
+- **Packaging guide**: `docs/APP_PACKAGING.md` end-to-end from source to
+  signed distribution.
+- **CI**: clean-runner jobs now also package the demo application with
+  `raco bezel package` and execute the packaged binary headlessly on all
+  release targets.
+
 ## 0.2.0 — 2026-09-21
 
 Commercial-hardening release focused on correctness, reproducibility, and portable native distribution.

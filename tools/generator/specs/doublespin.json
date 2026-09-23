@@ -1,0 +1,18 @@
+{
+  "class": "QDoubleSpinBox",
+  "module": "doublespin",
+  "header": "QDoubleSpinBox",
+  "constructors": [
+    { "c-name": "doublespin-new", "args": ["parent"] }
+  ],
+  "methods": [
+    { "c-name": "doublespin-set-value",       "qt": "setValue",      "args": ["double"] },
+    { "c-name": "doublespin-value",           "qt": "value",         "ret": "double" },
+    { "c-name": "doublespin-set-range",       "qt": "setRange",      "args": ["double", "double"] },
+    { "c-name": "doublespin-set-decimals",    "qt": "setDecimals",   "args": ["int"] },
+    { "c-name": "doublespin-set-single-step", "qt": "setSingleStep", "args": ["double"] },
+    { "c-name": "doublespin-set-prefix",      "qt": "setPrefix",     "args": ["string"] },
+    { "c-name": "doublespin-set-suffix",      "qt": "setSuffix",     "args": ["string"] }
+  ],
+  "signals": ["valueChanged(double)"]
+}

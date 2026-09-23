@@ -19,6 +19,7 @@
          make-slider
          make-progress
          make-list-widget
+         make-table-widget
 
          widget-show!
          widget-hide!
@@ -29,6 +30,13 @@
          widget-move!
          set-window-title!
          set-widget-stylesheet!
+         set-tooltip!
+         widget-tooltip
+         widget-width
+         widget-height
+         widget-x
+         widget-y
+         center-widget!
 
          widget-set-text!
          widget-text
@@ -48,6 +56,13 @@
          set-placeholder!
          set-readonly!
 
+         table-set-dimensions!
+         table-row-count
+         table-column-count
+         table-set-header-labels!
+         table-set-cell-text!
+         table-cell-text
+
          widget-grab-png)
 
 (require ffi/unsafe
@@ -65,6 +80,18 @@
   (wrap-handle (ok-handle who (build (and parent (ptr-of parent))))
                'widget (not parent)))
 
+;; Constructors accept the parent positionally (make-label "x" win) or as
+;; the #:parent keyword (make-label "x" #:parent win). Passing both is an
+;; error — silent precedence would hide copy-paste mistakes.
+(define (resolve-parent-arg who positional kw)
+  (when (and positional kw)
+    (raise
+     (exn:fail:bezel
+      (format "bezel: ~a: parent given twice — pass it positionally or with #:parent, not both"
+              who)
+      (current-continuation-marks))))
+  (or kw positional))
+
 ;; ---- constructors ---------------------------------------------------------
 
 ;; (make-window #:title "..." #:size '(w h) #:stylesheet "qss")
@@ -78,41 +105,57 @@
   (when stylesheet (set-widget-stylesheet! win stylesheet))
   win)
 
-(define (make-widget [parent #f])
-  (spawn 'make-widget (lambda (p) (bezel-widget-new p)) parent))
+(define (make-widget [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-widget (lambda (p) (bezel-widget-new p))
+         (resolve-parent-arg 'make-widget parent kw-parent)))
 
-(define (make-label text [parent #f])
-  (spawn 'make-label (lambda (p) (bezel-label-new text p)) parent))
+(define (make-label text [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-label (lambda (p) (bezel-label-new text p))
+         (resolve-parent-arg 'make-label parent kw-parent)))
 
-(define (make-button text [parent #f])
-  (spawn 'make-button (lambda (p) (bezel-button-new text p)) parent))
+(define (make-button text [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-button (lambda (p) (bezel-button-new text p))
+         (resolve-parent-arg 'make-button parent kw-parent)))
 
-(define (make-checkbox text [parent #f])
-  (spawn 'make-checkbox (lambda (p) (bezel-checkbox-new text p)) parent))
+(define (make-checkbox text [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-checkbox (lambda (p) (bezel-checkbox-new text p))
+         (resolve-parent-arg 'make-checkbox parent kw-parent)))
 
-(define (make-line-edit [text ""] [parent #f])
-  (spawn 'make-line-edit (lambda (p) (bezel-lineedit-new text p)) parent))
+(define (make-line-edit [text ""] [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-line-edit (lambda (p) (bezel-lineedit-new text p))
+         (resolve-parent-arg 'make-line-edit parent kw-parent)))
 
-(define (make-text-edit [parent #f])
-  (spawn 'make-text-edit (lambda (p) (bezel-textedit-new p)) parent))
+(define (make-text-edit [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-text-edit (lambda (p) (bezel-textedit-new p))
+         (resolve-parent-arg 'make-text-edit parent kw-parent)))
 
-(define (make-combo [parent #f])
-  (spawn 'make-combo (lambda (p) (bezel-combo-new p)) parent))
+(define (make-combo [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-combo (lambda (p) (bezel-combo-new p))
+         (resolve-parent-arg 'make-combo parent kw-parent)))
 
-(define (make-spin-box [parent #f])
-  (spawn 'make-spin-box (lambda (p) (bezel-spinbox-new p)) parent))
+(define (make-spin-box [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-spin-box (lambda (p) (bezel-spinbox-new p))
+         (resolve-parent-arg 'make-spin-box parent kw-parent)))
 
 ;; (make-slider #:vertical? #t) for a vertical slider.
-(define (make-slider #:vertical? [vertical? #f] [parent #f])
-  (spawn 'make-slider (lambda (p) (bezel-slider-new (if vertical? 1 0) p)) parent))
+(define (make-slider #:vertical? [vertical? #f] [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-slider (lambda (p) (bezel-slider-new (if vertical? 1 0) p))
+         (resolve-parent-arg 'make-slider parent kw-parent)))
 
-(define (make-progress [parent #f])
-  (spawn 'make-progress (lambda (p) (bezel-progress-new p)) parent))
+(define (make-progress [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-progress (lambda (p) (bezel-progress-new p))
+         (resolve-parent-arg 'make-progress parent kw-parent)))
 
 ;; Named make-list-widget (not make-list) to avoid clashing with
 ;; racket/list's make-list.
-(define (make-list-widget [parent #f])
-  (spawn 'make-list-widget (lambda (p) (bezel-list-new p)) parent))
+(define (make-list-widget [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-list-widget (lambda (p) (bezel-list-new p))
+         (resolve-parent-arg 'make-list-widget parent kw-parent)))
+
+;; QTableWidget — see the table-* API at the bottom of this module.
+(define (make-table-widget [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-table-widget (lambda (p) (bezel-table-new p))
+         (resolve-parent-arg 'make-table-widget parent kw-parent)))
 
 ;; ---- QWidget shared API ------------------------------------------------------
 
@@ -156,6 +199,49 @@
 (define (set-widget-stylesheet! w qss)
   (require-alive! 'set-widget-stylesheet! w)
   (ok! 'set-widget-stylesheet! (bezel-widget-set-stylesheet (ptr-of w) qss)))
+
+;; ---- tooltips ---------------------------------------------------------------
+
+(define (set-tooltip! w text)
+  (require-alive! 'set-tooltip! w)
+  (ok! 'set-tooltip! (bezel-widget-set-tooltip (ptr-of w) text)))
+
+(define (widget-tooltip w)
+  (require-alive! 'widget-tooltip w)
+  (define p (ok-string 'widget-tooltip (bezel-widget-tooltip (ptr-of w))))
+  (begin0 (cstring->string/utf8 p)
+    (bezel-free p)))
+
+;; ---- geometry ----------------------------------------------------------------
+;;
+;; Like widget-value: -1 legitimately means "no selection"-style values
+;; never occur here, so -1 is an error only when the shim also produced
+;; a fresh error message (dead/unknown handle).
+
+(define (geometry-ref who r)
+  (when (and (= r -1) (last-error)) (raise-bezel-error who))
+  r)
+
+(define (widget-width w)
+  (require-alive! 'widget-width w)
+  (geometry-ref 'widget-width (bezel-widget-width (ptr-of w))))
+
+(define (widget-height w)
+  (require-alive! 'widget-height w)
+  (geometry-ref 'widget-height (bezel-widget-height (ptr-of w))))
+
+(define (widget-x w)
+  (require-alive! 'widget-x w)
+  (geometry-ref 'widget-x (bezel-widget-x (ptr-of w))))
+
+(define (widget-y w)
+  (require-alive! 'widget-y w)
+  (geometry-ref 'widget-y (bezel-widget-y (ptr-of w))))
+
+;; Center inside the parent widget, or on the screen when top-level.
+(define (center-widget! w)
+  (require-alive! 'center-widget! w)
+  (ok! 'center-widget! (bezel-widget-center (ptr-of w))))
 
 ;; ---- value API ------------------------------------------------------------------
 
@@ -240,6 +326,37 @@
 (define (set-readonly! w readonly?)
   (require-alive! 'set-readonly! w)
   (ok! 'set-readonly! (bezel-widget-set-readonly (ptr-of w) (if readonly? 1 0))))
+
+;; ---- tables --------------------------------------------------------------------
+;;
+;; QTableWidget with plain-text cells. Header labels use Qt's
+;; '\n'-separated convention: (table-set-header-labels! t "Name\nScore").
+
+(define (table-set-dimensions! t rows cols)
+  (require-alive! 'table-set-dimensions! t)
+  (ok! 'table-set-dimensions! (bezel-table-set-dimensions (ptr-of t) rows cols)))
+
+(define (table-row-count t)
+  (require-alive! 'table-row-count t)
+  (geometry-ref 'table-row-count (bezel-table-row-count (ptr-of t))))
+
+(define (table-column-count t)
+  (require-alive! 'table-column-count t)
+  (geometry-ref 'table-column-count (bezel-table-column-count (ptr-of t))))
+
+(define (table-set-header-labels! t labels)
+  (require-alive! 'table-set-header-labels! t)
+  (ok! 'table-set-header-labels! (bezel-table-set-header-labels (ptr-of t) labels)))
+
+(define (table-set-cell-text! t row col text)
+  (require-alive! 'table-set-cell-text! t)
+  (ok! 'table-set-cell-text! (bezel-table-set-cell-text (ptr-of t) row col text)))
+
+(define (table-cell-text t row col)
+  (require-alive! 'table-cell-text t)
+  (define p (ok-string 'table-cell-text (bezel-table-cell-text (ptr-of t) row col)))
+  (begin0 (cstring->string/utf8 p)
+    (bezel-free p)))
 
 ;; ---- verification ----------------------------------------------------------------
 
