@@ -4,6 +4,7 @@
          bezel-library-names
          bezel-native-search-roots
          bezel-native-library-candidates
+         root-library-candidates
          qt-plugin-root-for
          bezel-lib-root)
 

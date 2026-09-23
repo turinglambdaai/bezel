@@ -52,10 +52,12 @@
   (unless (zero? code)
     (die "raco ~a failed with exit code ~a" (string-join (map ~a args)) code)))
 
-;; A usable runtime root contains the shim library itself.
+;; A usable runtime root contains the shim library itself — directly at
+;; the root (Windows/Linux) or inside the macdeployqt BezelRuntime.app
+;; bundle (macOS), matching root-library-candidates.
 (define (runtime-root-usable? root)
-  (for/or ([name (in-list bezel-library-names)])
-    (file-exists? (build-path root name))))
+  (for/or ([candidate (in-list (root-library-candidates root))])
+    (file-exists? candidate)))
 
 (define (resolve-runtime-dir explicit)
   (or explicit
