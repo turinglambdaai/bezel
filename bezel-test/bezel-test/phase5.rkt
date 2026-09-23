@@ -121,7 +121,7 @@
   (richtext-append e "more 中文")
   (check-equal? (richtext-to-plain-text e) "line\nmore 中文")
   (richtext-set-html e "<b>bold</b>")
-  (check-pred string-contains? (richtext-html e) "bold")
+  (check-true (string-contains? (richtext-html e) "bold"))
   (richtext-clear e)
   (check-equal? (richtext-to-plain-text e) ""))
 
