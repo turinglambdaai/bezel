@@ -88,3 +88,28 @@ Racket nor Qt. Reminders:
   `xattr -d com.apple.quarantine`.
 - Keep `native/` beside the executable; the loader also honors
   `BEZEL_NATIVE_DIR`/`BEZEL_LIBRARY` for advanced deployment layouts.
+
+## 5. Tell users about updates
+
+Host one static JSON file anywhere you control (release bucket, GitHub
+Pages, CDN) and check it from the app:
+
+```racket
+(after! 1000 (lambda ()
+  (check-and-prompt-update!
+   #:feed "https://example.com/myapp-updates.json"
+   #:current "1.2.3"
+   #:parent win)))
+```
+
+Feed format (update it when you publish a release):
+
+```json
+{"version": "1.3.0",
+ "url": "https://github.com/me/myapp/releases/latest",
+ "notes": "Highlight the changes"}
+```
+
+Failures are quiet (`#f`), so a dead URL or an offline machine never
+disrupts startup. This is a check-and-notify flow; downloading and
+replacing the application remains a distribution-channel decision.

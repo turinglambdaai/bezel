@@ -200,6 +200,21 @@ Handlers run on their own Racket thread; widget calls inside them marshal to the
 (set-action-shortcut! act "Ctrl+Q")
 ```
 
+### Update checks
+
+Host one static JSON feed (`version` / `url` / optional `notes`) next to your releases; Bezel compares and prompts through the native dialog, opening the download page in the browser on confirmation. Best-effort by design — timeouts and unreachable feeds return `#f` instead of raising:
+
+```racket
+(after! 1000
+        (lambda ()
+          (check-and-prompt-update!
+           #:feed "https://example.com/myapp-updates.json"
+           #:current "1.2.3"
+           #:parent win)))
+```
+
+`check-for-update` returns the raw `update-info` when you want your own presentation.
+
 ### Signals
 
 ```racket

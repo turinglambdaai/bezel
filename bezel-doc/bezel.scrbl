@@ -69,6 +69,9 @@ names follow @tt{make-widget} / @tt{widget-set-text!} conventions:
  @item{Timers: @racket[after!], @racket[every!], @racket[stop-timer!]}
  @item{Dialogs: @racket[msg-question], @racket[get-open-file-name],
        @racket[get-save-file-name]}
+ @item{Update checks: @racket[check-for-update],
+       @racket[check-and-prompt-update!] — best-effort version-feed
+       comparison with a native prompt}
  @item{Object model: @racket[bezel-alive?], @racket[bezel-delete!],
        @racket[qt-object-name]}
  @item{Verification: @racket[widget-grab-png] — real PNG bytes of any widget}]

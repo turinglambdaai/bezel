@@ -22,6 +22,11 @@ final-application packaging/signing helpers.
   that marshals widget calls to the GUI thread without owning the pump.
 - **Native file dialogs**: `get-open-file-name` / `get-save-file-name`
   (modal, same contract as the `msg-*` family; `#f` on cancel).
+- **Best-effort update checks**: `check-for-update` /
+  `check-and-prompt-update!` against a static JSON version feed
+  (`version`/`url`/`notes`), with padded dotted-version comparison,
+  bounded timeouts, and quiet-`#f` failure semantics; the prompt variant
+  opens the release page in the system browser.
 - **Widget extras**: tooltips (`set-tooltip!` / `widget-tooltip`),
   geometry readers (`widget-width` / `widget-height` / `widget-x` /
   `widget-y`), `center-widget!`, and menu-action keyboard shortcuts

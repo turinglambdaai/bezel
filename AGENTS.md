@@ -83,6 +83,7 @@ bezel-lib/            # 核心库（collection `bezel`）
 ├── dialogs.rkt       # msg-information / warning / question + 文件对话框
 ├── signals.rkt       # connect! / disconnect! / emit-test-signal!
 ├── timers.rkt        # after! / every! / stop-timer!（纯 Racket 线程调度）
+├── updates.rkt       # check-for-update / check-and-prompt-update!（静态 JSON 清单，尽力而为）
 ├── cli.rkt           # raco bezel doctor | package
 ├── main.rkt          # umbrella
 └── private/

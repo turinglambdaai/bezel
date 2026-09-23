@@ -31,6 +31,7 @@
          "private/objects.rkt"
          "signals.rkt"
          "timers.rkt"
+         "updates.rkt"
          "widgets.rkt")
 
 (provide
@@ -58,6 +59,8 @@
  (all-from-out "signals.rkt")
  ;; timers (after! / every! / stop-timer!)
  (all-from-out "timers.rkt")
+ ;; update checks (check-for-update / check-and-prompt-update!)
+ (all-from-out "updates.rkt")
  ;; object model (bezel-alive?, bezel-delete!, qt-object-name, ...)
  (all-from-out "private/objects.rkt")
  ;; error type (exn:fail:bezel? and friends)

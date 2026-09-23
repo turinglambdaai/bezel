@@ -202,6 +202,21 @@ Handler 运行在各自的 Racket 线程上；其中的控件调用会自动编�
 (set-action-shortcut! act "Ctrl+Q")
 ```
 
+### 更新检查
+
+在你的发布页旁边托管一份静态 JSON 清单（`version` / `url` / 可选 `notes`）；Bezel 负责比较版本并用原生对话框提示，用户确认后自动在浏览器打开下载页。整体是尽力而为语义——超时和不可达的清单返回 `#f` 而不是抛异常：
+
+```racket
+(after! 1000
+        (lambda ()
+          (check-and-prompt-update!
+           #:feed "https://example.com/myapp-updates.json"
+           #:current "1.2.3"
+           #:parent win)))
+```
+
+想自己做提示 UI 时用 `check-for-update`，它直接返回 `update-info`。
+
 ### 信号
 
 ```racket
