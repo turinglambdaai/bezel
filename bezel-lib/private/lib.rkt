@@ -28,19 +28,21 @@
 
 (require ffi/unsafe
          racket/path
-         racket/runtime-path
          racket/string
          "platform.rkt")
 
-(define-runtime-path here ".")
-
-;; From bezel-lib/private/ up to the repo root (development checkouts).
-(define repo-root (simplify-path (build-path here ".." "..")))
+;; From the bezel-lib package root up to the repo root (development
+;; checkouts). Computed from platform.rkt's collection root instead of a
+;; relative define-runtime-path: relative runtime-path specs break
+;; `raco distribute` on any application embedding bezel-lib.
+(define repo-root
+  (and bezel-lib-root (build-path bezel-lib-root 'up)))
 
 (define shim-candidates
-  (for*/list ([dir (in-list (list (build-path repo-root "bezel-shim" "build")
-                                  (build-path repo-root "bezel-shim" "build" "Release")))]
-              [name (in-list bezel-library-names)])
+  (for*/list ([dir (in-list (list (and repo-root (build-path repo-root "bezel-shim" "build"))
+                                  (and repo-root (build-path repo-root "bezel-shim" "build" "Release"))))]
+              [name (in-list bezel-library-names)]
+              #:when dir)
     (build-path dir name)))
 
 (define (truthy-env? name)
