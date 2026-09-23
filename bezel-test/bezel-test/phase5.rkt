@@ -77,7 +77,7 @@
   (check-true (>= (tabs-add t page1 "First") 0))
   (check-true (>= (tabs-add t page2 "Second") 0))
   (check-equal? (tabs-count t) 2)
-  (check-equal? (tabs-current-index t) -1 "no page selected yet")
+  (check-equal? (tabs-current-index t) 0 "adding the first tab selects it")
   (tabs-set-current-index t 1)
   (check-equal? (tabs-current-index t) 1)
   (check-equal? (tabs-tab-text t 0) "First")
