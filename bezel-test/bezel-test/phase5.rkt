@@ -206,8 +206,14 @@
 
 (test-case "timers: widget calls from a timer marshal to the GUI thread"
   (define l (make-label "waiting"))
-  (define t (after! 50 (lambda () (widget-set-text! l "from timer"))))
-  (check-true (wait-for (lambda () (equal? "from timer" (widget-text l))) 300)
-              "timer handler should update the label"))
+  (define done (box #f))
+  (after! 50 (lambda ()
+               (widget-set-text! l "from timer")
+               (set-box! done #t)))
+  ;; The handler's widget call enters the marshal queue; only a pumping
+  ;; main thread can drain it — exactly like a real `run` loop.
+  (check-true (wait-for (lambda () (process-events! 20) (unbox done)) 300)
+              "timer handler should update the label via the marshal queue")
+  (check-equal? (widget-text l) "from timer"))
 
 (displayln "bezel-test/phase5: all tests passed")

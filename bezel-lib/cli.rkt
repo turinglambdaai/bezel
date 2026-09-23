@@ -52,18 +52,37 @@
 (define package-usage
   (string-append
    "usage: raco bezel package --entry <module.rkt> --name <AppName>\n"
-   "                      [--dest <dir>] [--runtime-dir <dir>]\n"))
+   "                      [--dest <dir>] [--runtime-dir <dir>] [--gui]\n"))
+
+(define (flag->key flag)
+  (match flag
+    ["--entry" 'entry]
+    ["--name" 'name]
+    ["--dest" 'dest]
+    ["--runtime-dir" 'runtime-dir]
+    ["--gui" 'gui]
+    [_ #f]))
+
+;; Boolean flags carry no value.
+(define boolean-flags '(gui))
 
 (define (parse-package-flags args)
   (let loop ([args args] [flags '()])
     (match args
       [(list) (reverse flags)]
       [(list flag value rest ...)
-       (match flag
-         [(or "--entry" "--name" "--dest" "--runtime-dir")
-          (loop rest (cons (cons (string->symbol (string-trim flag "-")) value) flags))]
-         [_ (raise-user-error 'bezel/package "unknown flag: ~a\n~a" flag package-usage)])]
-      [_ (raise-user-error 'bezel/package "flag ~a needs a value\n~a" (car args) package-usage)])))
+       (define key (flag->key flag))
+       (cond
+         [(memq key boolean-flags) (loop (cons value rest) (cons (cons key #t) flags))]
+         [key (loop rest (cons (cons key value) flags))]
+         [else (raise-user-error 'bezel/package "unknown flag: ~a\n~a" flag package-usage)])]
+      [(list flag)
+       (define key (flag->key flag))
+       (cond
+         [(memq key boolean-flags) (reverse (cons (cons key #t) flags))]
+         [key (raise-user-error 'bezel/package "flag ~a needs a value\n~a" flag package-usage)]
+         [else (raise-user-error 'bezel/package "unknown flag: ~a\n~a" flag package-usage)])]
+      [_ (raise-user-error 'bezel/package package-usage)])))
 
 (define (flag-ref flags key [default #f])
   (cond [(assq key flags) => cdr] [else default]))
@@ -81,7 +100,8 @@
    #:name name
    #:dest (flag-ref flags 'dest "dist")
    #:runtime-dir (and (flag-ref flags 'runtime-dir)
-                      (path->complete-path (flag-ref flags 'runtime-dir)))))
+                      (path->complete-path (flag-ref flags 'runtime-dir)))
+   #:gui? (and (flag-ref flags 'gui) #t)))
 
 (define args (vector->list (current-command-line-arguments)))
 (cond

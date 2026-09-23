@@ -10,8 +10,10 @@
 ;; resolves it at startup):
 ;;
 ;;   dist/MyApp/
-;;     MyApp[.exe]                  (raco exe --embed)
-;;     native/<os>-<arch>/...       (libbezel + Qt + plugins)
+;;     MyApp[.exe]                  standalone launcher
+;;     lib/...                      Racket runtime (macOS/Linux;
+;;                                   Windows embeds the DLLs in the exe)
+;;     native/<os>-<arch>/...       libbezel + Qt + plugins
 ;;
 ;; Runtime source priority: --runtime-dir argument, $BEZEL_NATIVE_DIR,
 ;; the installed bezel-lib package's own bundled runtime.
@@ -38,7 +40,7 @@
   (define raco (find-raco))
   (printf "  $ raco ~a\n" (string-join (map ~a args) " "))
   (define-values (sp stdout stdin stderr)
-    (subprocess #f #f #f raco args))
+    (apply subprocess #f #f #f raco args))
   (close-output-port stdin)
   (copy-port stdout (current-output-port))
   (copy-port stderr (current-error-port))
@@ -69,7 +71,8 @@
 (define (package-app! #:entry entry
                       #:name name
                       #:dest [dest "dist"]
-                      #:runtime-dir [runtime-dir #f])
+                      #:runtime-dir [runtime-dir #f]
+                      #:gui? [gui? #f])
   (define entry-path (path->complete-path entry))
   (unless (file-exists? entry-path)
     (die "entry module does not exist: ~a" (path->string entry-path)))
@@ -86,24 +89,42 @@
     (delete-directory/files app-dir))
   (make-directory* app-dir)
 
-  ;; 1. Standalone launcher: the module graph is embedded, so the app has
-  ;;    no Racket dependency at run time.
+  ;; 1. Standalone launcher with no Racket installation required.
+  ;;    Windows: --embed-dlls puts the Racket runtime inside the exe
+  ;;    (single file; `raco distribute` is avoided — it breaks on
+  ;;    current Racket builds). macOS/Linux: `raco distribute` places
+  ;;    the exe together with a lib/ tree of Racket runtime libraries.
   (define exe-name (if (eq? (system-type) 'windows) (~a name ".exe") (~a name)))
-  (define exe-path (build-path app-dir exe-name))
-  (run-raco! (list "exe" "--embed" "-o" (path->string exe-path)
-                   (path->string entry-path)))
-  (unless (file-exists? exe-path)
-    (die "raco exe did not produce ~a" (path->string exe-path)))
+  (cond
+    [(eq? (system-type) 'windows)
+     (run-raco! (append '("exe" "--embed-dlls" "-o")
+                        (list (path->string (build-path app-dir exe-name)))
+                        (if gui? '("--gui") '())
+                        (list (path->string entry-path))))]
+    [else
+     (define staging (make-temporary-file "bezel-app~a" 'directory))
+     (define staged-exe (build-path staging exe-name))
+     (run-raco! (append '("exe" "-o") (list (path->string staged-exe))
+                        (if gui? '("--gui") '())
+                        (list (path->string entry-path))))
+     (unless (file-exists? staged-exe)
+       (die "raco exe did not produce ~a" (path->string staged-exe)))
+     (run-raco! (list "distribute" (path->string app-dir) (path->string staged-exe)))])
+  (unless (file-exists? (build-path app-dir exe-name))
+    (die "packaging did not produce ~a" (path->string (build-path app-dir exe-name))))
 
   ;; 2. Bundle the native runtime beside the executable in exactly the
   ;;    layout private/lib.rkt resolves at startup.
   (define native-dest (build-path app-dir "native" bezel-platform-key))
   (printf "  bundling:      native/~a\n" bezel-platform-key)
+  ;; copy-directory/files creates the destination itself but not the
+  ;; intermediate directories leading to it.
+  (make-directory* (build-path app-dir "native"))
   (copy-directory/files runtime-root native-dest)
 
   ;; 3. Ship run + sign instructions next to the binary.
   (display-lines-to-file
-   (list (format "To run: keep native/ beside ~a." exe-name)
+   (list (format "To run: keep native/ beside ~a (and lib/ where present)." exe-name)
          "To sign: see scripts/sign-app-windows.ps1 / scripts/sign-app-macos.sh"
          "          in the Bezel repository, and docs/APP_PACKAGING.md.")
    (build-path app-dir "RUNNING.txt")

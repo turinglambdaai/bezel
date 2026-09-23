@@ -31,3 +31,6 @@ Thumbs.db
 # test / verification artifacts
 *.png.tmp
 docs/showcase-*.png
+
+# local packaging test output
+app-dist/
