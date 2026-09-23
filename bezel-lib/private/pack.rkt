@@ -44,10 +44,11 @@
   (close-output-port stdin)
   (copy-port stdout (current-output-port))
   (copy-port stderr (current-error-port))
+  ;; wait first: subprocess-status may otherwise report 'running
+  (subprocess-wait sp)
   (define code (subprocess-status sp))
   (close-input-port stdout)
   (close-input-port stderr)
-  (subprocess-wait sp)
   (unless (zero? code)
     (die "raco ~a failed with exit code ~a" (string-join (map ~a args)) code)))
 
