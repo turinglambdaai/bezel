@@ -50,17 +50,6 @@ BEZEL_EXPORT int splitter_set_orientation(bezel_handle h, int in0) {
     });
 }
 
-BEZEL_EXPORT int splitter_set_stretch_factor(bezel_handle h, bezel_handle in0, int in1) {
-    return on_gui([=]() -> int {
-        QSplitter* obj = resolve_obj(h, "splitter_set_stretch_factor");
-        if (!obj) return 0;
-        QWidget* widget0 = resolve_as<QWidget>(in0, "splitter_set_stretch_factor");
-        if (!widget0) return 0;
-        obj->setStretchFactor(widget0, in1);
-        return 1;
-    });
-}
-
 BEZEL_EXPORT int splitter_set_handle_width(bezel_handle h, int in0) {
     return on_gui([=]() -> int {
         QSplitter* obj = resolve_obj(h, "splitter_set_handle_width");

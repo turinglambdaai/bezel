@@ -8,7 +8,6 @@
   "methods": [
     { "c-name": "splitter-add-widget",         "qt": "addWidget",          "args": ["widget"] },
     { "c-name": "splitter-set-orientation",    "qt": "setOrientation",     "args": ["orientation"] },
-    { "c-name": "splitter-set-stretch-factor", "qt": "setStretchFactor",   "args": ["widget", "int"] },
     { "c-name": "splitter-set-handle-width",   "qt": "setHandleWidth",     "args": ["int"] }
   ],
   "signals": ["splitterMoved(int,int)"]

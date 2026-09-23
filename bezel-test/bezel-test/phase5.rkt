@@ -105,13 +105,12 @@
   (stacked-set-current-index s 1)
   (check-equal? (stacked-current-index s) 1))
 
-(test-case "splitter: widgets, orientation, stretch"
+(test-case "splitter: widgets, orientation, handle width"
   (define sp (splitter-new))
   (check-not-exn (lambda () (splitter-add-widget sp (make-label "left"))))
   (check-not-exn (lambda () (splitter-add-widget sp (make-label "right"))))
   ;; 2 = Qt::Vertical, the generator's orientation argument
   (splitter-set-orientation sp 2)
-  (check-not-exn (lambda () (splitter-set-stretch-factor sp (make-label "x") 1)))
   (check-not-exn (lambda () (splitter-set-handle-width sp 4)))
   (check-true (bezel-alive? sp)))
 

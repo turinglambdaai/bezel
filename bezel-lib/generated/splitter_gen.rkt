@@ -6,7 +6,6 @@
          splitter-new
          splitter-add-widget
          splitter-set-orientation
-         splitter-set-stretch-factor
          splitter-set-handle-width)
 
 (require ffi/unsafe
@@ -44,14 +43,6 @@
   (define r
     (gui (lambda () (ffi:splitter-set-orientation (ptr-of o) v0))))
   (ok! 'splitter-set-orientation r))
-
-(define ffi:splitter-set-stretch-factor (get-ffi-obj 'splitter_set_stretch_factor bezel-lib (_fun _bezel-handle _bezel-handle _int -> _int)))
-(define (splitter-set-stretch-factor o v0 v1)
-  (require-alive! 'splitter-set-stretch-factor o)
-  (when v0 (require-alive! 'splitter-set-stretch-factor v0))
-  (define r
-    (gui (lambda () (ffi:splitter-set-stretch-factor (ptr-of o) (and v0 (ptr-of v0)) v1))))
-  (ok! 'splitter-set-stretch-factor r))
 
 (define ffi:splitter-set-handle-width (get-ffi-obj 'splitter_set_handle_width bezel-lib (_fun _bezel-handle _int -> _int)))
 (define (splitter-set-handle-width o v0)
