@@ -15,10 +15,14 @@ The command produces:
 
 ```text
 dist/MyApp/
-├── MyApp[.exe]            # embedded executable (no Racket install needed)
-├── native/<os>-<arch>/    # libbezel + Qt libraries + platform plugins
+├── MyApp[.exe]            # Windows: single exe with the Racket runtime embedded
+├── bin/MyApp              # macOS/Linux: launcher (raco distribute layout)
+├── lib/                   # macOS/Linux: Racket runtime libraries
+├── [bin/]native/<os>-<arch>/   # libbezel + Qt + plugins, beside the executable
 └── RUNNING.txt
 ```
+
+The native runtime always sits beside the actual executable — `<exe-dir>/native/<os>-<arch>/` is the loader search step that makes the folder self-contained.
 
 Runtime selection order: `--runtime-dir`, then `$BEZEL_NATIVE_DIR`, then
 the installed `bezel-lib` package's bundled runtime (the
@@ -29,7 +33,10 @@ documented in the README and `bezel-lib/private/lib.rkt`.
 Verify headlessly before shipping:
 
 ```bash
-QT_QPA_PLATFORM=offscreen ./dist/MyApp/MyApp   # or MyApp.exe on Windows
+# Windows
+QT_QPA_PLATFORM=offscreen ./dist/MyApp/MyApp.exe
+# macOS / Linux
+QT_QPA_PLATFORM=offscreen ./dist/MyApp/bin/MyApp
 ```
 
 CI performs this exact check on all three release targets via

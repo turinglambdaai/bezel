@@ -91,35 +91,43 @@
 
   ;; 1. Standalone launcher with no Racket installation required.
   ;;    Windows: --embed-dlls puts the Racket runtime inside the exe
-  ;;    (single file; `raco distribute` is avoided — it breaks on
-  ;;    current Racket builds). macOS/Linux: `raco distribute` places
-  ;;    the exe together with a lib/ tree of Racket runtime libraries.
+  ;;    (single file; `raco distribute` is avoided — it crashes when the
+  ;;    embedded module graph records relative runtime paths). macOS/
+  ;;    Linux: `raco distribute` installs the exe under bin/ together
+  ;;    with a lib/ tree of Racket runtime libraries.
   (define exe-name (if (eq? (system-type) 'windows) (~a name ".exe") (~a name)))
-  (cond
-    [(eq? (system-type) 'windows)
-     (run-raco! (append '("exe" "--embed-dlls" "-o")
-                        (list (path->string (build-path app-dir exe-name)))
-                        (if gui? '("--gui") '())
-                        (list (path->string entry-path))))]
-    [else
-     (define staging (make-temporary-file "bezel-app~a" 'directory))
-     (define staged-exe (build-path staging exe-name))
-     (run-raco! (append '("exe" "-o") (list (path->string staged-exe))
-                        (if gui? '("--gui") '())
-                        (list (path->string entry-path))))
-     (unless (file-exists? staged-exe)
-       (die "raco exe did not produce ~a" (path->string staged-exe)))
-     (run-raco! (list "distribute" (path->string app-dir) (path->string staged-exe)))])
-  (unless (file-exists? (build-path app-dir exe-name))
-    (die "packaging did not produce ~a" (path->string (build-path app-dir exe-name))))
+  (define exe-path
+    (cond
+      [(eq? (system-type) 'windows)
+       (define out (build-path app-dir exe-name))
+       (run-raco! (append '("exe" "--embed-dlls" "-o")
+                          (list (path->string out))
+                          (if gui? '("--gui") '())
+                          (list (path->string entry-path))))
+       out]
+      [else
+       (define staging (make-temporary-file "bezel-app~a" 'directory))
+       (define staged-exe (build-path staging exe-name))
+       (run-raco! (append '("exe" "-o") (list (path->string staged-exe))
+                          (if gui? '("--gui") '())
+                          (list (path->string entry-path))))
+       (unless (file-exists? staged-exe)
+         (die "raco exe did not produce ~a" (path->string staged-exe)))
+       (run-raco! (list "distribute" (path->string app-dir) (path->string staged-exe)))
+       ;; distribute places console executables under bin/ on Unix
+       (build-path app-dir "bin" exe-name)]))
+  (unless (file-exists? exe-path)
+    (die "packaging did not produce ~a" (path->string exe-path)))
 
   ;; 2. Bundle the native runtime beside the executable in exactly the
   ;;    layout private/lib.rkt resolves at startup.
-  (define native-dest (build-path app-dir "native" bezel-platform-key))
-  (printf "  bundling:      native/~a\n" bezel-platform-key)
+  (define exe-dir (path-only exe-path))
+  (define native-dest (build-path exe-dir "native" bezel-platform-key))
+  (printf "  bundling:      ~a\n"
+          (path->string (find-relative-path app-dir native-dest)))
   ;; copy-directory/files creates the destination itself but not the
   ;; intermediate directories leading to it.
-  (make-directory* (build-path app-dir "native"))
+  (make-directory* (build-path exe-dir "native"))
   (copy-directory/files runtime-root native-dest)
 
   ;; 3. Ship run + sign instructions next to the binary.

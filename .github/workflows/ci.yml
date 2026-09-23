@@ -295,8 +295,11 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          exe=./app-dist/bezel-demo/bezel-demo
-          if [[ "${{ runner.os }}" == "Windows" ]]; then exe=$exe.exe; fi
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            exe=./app-dist/bezel-demo/bezel-demo.exe
+          else
+            exe=./app-dist/bezel-demo/bin/bezel-demo
+          fi
           "$exe"
           code=$?
           echo "packaged app exit code: $code"
