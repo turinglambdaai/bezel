@@ -20,10 +20,11 @@ file(GLOB BEZEL_GENERATED ${CMAKE_CURRENT_SOURCE_DIR}/src/generated/*.cpp)
 set(BEZEL_SOURCES
     src/core.cpp
     src/dialogs.cpp
-    src/widgets.cpp
     src/layouts.cpp
     src/signals.cpp
     src/signalsink.h
+    src/tray.cpp
+    src/widgets.cpp
     ${BEZEL_GENERATED}
 )
 

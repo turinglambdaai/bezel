@@ -52,7 +52,8 @@
 (define package-usage
   (string-append
    "usage: raco bezel package --entry <module.rkt> --name <AppName>\n"
-   "                      [--dest <dir>] [--runtime-dir <dir>] [--gui]\n"))
+   "                      [--dest <dir>] [--runtime-dir <dir>] [--gui]\n"
+   "                      [--bundle-id <reverse-dns-id>]\n"))
 
 (define (flag->key flag)
   (match flag
@@ -61,6 +62,7 @@
     ["--dest" 'dest]
     ["--runtime-dir" 'runtime-dir]
     ["--gui" 'gui]
+    ["--bundle-id" 'bundle-id]
     [_ #f]))
 
 ;; Boolean flags carry no value.
@@ -101,7 +103,8 @@
    #:dest (flag-ref flags 'dest "dist")
    #:runtime-dir (and (flag-ref flags 'runtime-dir)
                       (path->complete-path (flag-ref flags 'runtime-dir)))
-   #:gui? (and (flag-ref flags 'gui) #t)))
+   #:gui? (and (flag-ref flags 'gui) #t)
+   #:bundle-id (flag-ref flags 'bundle-id)))
 
 (define args (vector->list (current-command-line-arguments)))
 (cond

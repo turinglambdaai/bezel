@@ -22,6 +22,21 @@ final-application packaging/signing helpers.
   that marshals widget calls to the GUI thread without owning the pump.
 - **Native file dialogs**: `get-open-file-name` / `get-save-file-name`
   (modal, same contract as the `msg-*` family; `#f` on cancel).
+- **Tree widget** (`make-tree-widget`, row-addressed items, children,
+  selection, expansion) and **date editor** (`make-date-edit`,
+  `(dateedit-date e) => '(y m d)`, calendar popup, display format).
+- **Window chrome**: `window-status-bar` + `status-show-message!` /
+  `status-current-message`, `window-toolbar` + `toolbar-add-action!`.
+- **Desktop integration**: `clipboard-set-text!` / `clipboard-text`,
+  system tray with notifications and context menus (`make-tray`,
+  `tray-notify!`, `tray-set-menu!`).
+- **Sentry-compatible error reporting**: `install-sentry-reporter!`
+  hooks uncaught Racket exceptions into background, best-effort POSTs
+  (DSN parsing, event construction, quiet failure semantics); tested
+  against a local throwaway HTTP server.
+- **macOS .app bundles**: `raco bezel package` wraps macOS output in a
+  real bundle with Info.plist (`--bundle-id`); the signing helper signs
+  bundles inside-out.
 - **Best-effort update checks**: `check-for-update` /
   `check-and-prompt-update!` against a static JSON version feed
   (`version`/`url`/`notes`), with padded dotted-version comparison,

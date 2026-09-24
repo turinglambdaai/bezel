@@ -15,7 +15,13 @@
 ;;   (run win)
 
 (require "app.rkt"
+         "desktop.rkt"
          "dialogs.rkt"
+         "sentry.rkt"
+         "signals.rkt"
+         "timers.rkt"
+         "updates.rkt"
+         "widgets.rkt"
          "generated/dial_gen.rkt"
          "generated/doublespin_gen.rkt"
          "generated/groupbox_gen.rkt"
@@ -28,11 +34,7 @@
          "layouts.rkt"
          "menus.rkt"
          "private/errors.rkt"
-         "private/objects.rkt"
-         "signals.rkt"
-         "timers.rkt"
-         "updates.rkt"
-         "widgets.rkt")
+         "private/objects.rkt")
 
 (provide
  ;; application lifecycle
@@ -55,6 +57,10 @@
  (all-from-out "menus.rkt")
  ;; dialogs
  (all-from-out "dialogs.rkt")
+ ;; desktop integration (clipboard, system tray)
+ (all-from-out "desktop.rkt")
+ ;; error reporting (Sentry-compatible)
+ (all-from-out "sentry.rkt")
  ;; signals
  (all-from-out "signals.rkt")
  ;; timers (after! / every! / stop-timer!)

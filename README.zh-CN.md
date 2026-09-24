@@ -12,14 +12,16 @@ Racket 自带的 `racket/gui` 可以完成桌面开发，但要做现代、统�
 
 你将得到：
 
-- **真 Qt 控件** —— 窗口、按钮、输入框、列表、滑条、表格、标签页、分割器、分组框、表盘、LCD 数字、菜单、对话框、布局，并通过生成器继续扩展。
+- **真 Qt 控件** —— 窗口、按钮、输入框、列表、滑条、表格、树、日期选择、标签页、分割器、分组框、表盘、LCD 数字、菜单、工具栏、状态栏、对话框、布局，并通过生成器继续扩展。
 - **QSS 样式** —— 使用 Qt 的 CSS 风格系统构建商业界面。
 - **明确的线程语义** —— 公开控件 API 可以从任意 Racket 线程发起，自动编组到 GUI 线程。
 - **定时器** —— `after!` / `every!` 在自己的 Racket 线程里调度代码，内部控件调用安全编组到 GUI 线程。
 - **Agent 友好的验证能力** —— `widget-grab-png` 可渲染真实控件；CI 使用 Qt offscreen 后端做无头真对象测试。
 - **受检查的 native 边界** —— 加载时验证 shim ABI，尽早发现 Racket 绑定与 native 库版本不匹配。
 - **便携发行包** —— 支持的平台会把 `libbezel`、Qt runtime 和 Qt plugins 一起打进 Racket 包；最终用户不需要安装 Qt、CMake 或 C++ 编译器。
-- **最终应用打包** —— `raco bezel package` 把入口模块变成自包含的「可执行文件 + runtime」目录，并附带 Windows/macOS 签名辅助脚本。
+- **最终应用打包** —— `raco bezel package` 把入口模块变成自包含的「可执行文件 + runtime」目录（macOS 上是真正的 `.app` bundle），并附带 Windows/macOS 签名辅助脚本。
+- **桌面集成** —— 剪贴板、带通知的系统托盘、窗口状态栏与工具栏。
+- **错误上报钩子** —— 面向未捕获 Racket 异常的 Sentry 兼容上报器。
 - **运行环境诊断** —— `raco bezel doctor` 会报告平台、架构、native 搜索路径、环境变量和 ABI 加载状态。
 
 <p align="center"><img src="docs/showcase.png" alt="Bezel Showcase —— Racket 写就的真 Qt 界面" width="720"></p>
@@ -108,14 +110,17 @@ Bezel 有意把 native 边界控制得很小：
 | 跨线程公开控件访问 | ✅ | ✅ | ✅ |
 | 生成绑定的线程编组 | ✅ | ✅ | ✅ |
 | 生成器类（tabs/stacked/splitter/dial/…） | ✅ | ✅ | ✅ |
-| 表格控件 + 富文本编辑 | ✅ | ✅ | ✅ |
+| 表格/树控件 + 富文本编辑 | ✅ | ✅ | ✅ |
+| 日期编辑器 | ✅ | ✅ | ✅ |
+| 剪贴板 + 系统托盘 | ✅ | ✅ | ✅ |
+| Sentry 兼容错误上报 | ✅ | ✅ | ✅ |
 | 定时器（`after!` / `every!`） | ✅ | ✅ | ✅ |
 | 原生文件对话框 | ✅ | ✅ | ✅ |
 | QSS 样式 | ✅ | ✅ | ✅ |
 | `widget-grab-png` | ✅ | ✅ | ✅ |
 | 无头真对象 CI | ✅ | ✅ | ✅ |
 | 自包含发布包 | Apple Silicon | x86_64 | x86_64 |
-| `raco bezel package` 应用打包 | ✅ | ✅ | ✅ |
+| `raco bezel package` 应用目录（macOS 为 `.app`） | ✅ | ✅ | ✅ |
 
 暂不支持的 Qt signal 参数类型目前会退化为不带转换参数的投递。控件覆盖面如今已相当广泛，但仍然是有意收敛的集合；扩展方向是 generator，而不是宣称已经覆盖整个 Qt。
 
@@ -181,6 +186,29 @@ Score
 Note")
 (table-set-cell-text! t 0 0 "Ada")
 (table-cell-text t 0 0)
+```
+
+### 桌面集成
+
+```racket
+(clipboard-set-text! (format "~a results" n))
+(define tray (make-tray "icon.png" "MyApp"))
+(tray-show! tray)
+(tray-notify! tray "导出完成" "已写入 results.csv" #:icon 'information)
+(tray-set-menu! tray (menu! (menu-bar win) "Tray"))
+
+(status-show-message! (window-status-bar win) "Ready")
+(define act (toolbar-add-action! (window-toolbar win "Main") "Refresh"))
+(connect! act "triggered()" refresh!)
+```
+
+### 错误上报
+
+面向未捕获 Racket 异常的尽力而为 Sentry 上报器 —— 离线机器和失效 DSN 绝不打扰应用：
+
+```racket
+(install-sentry-reporter! "https://<key>@o<org>.ingest.sentry.io/<project>"
+                          #:release "1.2.3")
 ```
 
 ### 定时器
@@ -278,6 +306,8 @@ raco bezel doctor
 raco bezel package --entry my-app.rkt --name MyApp --dest dist
 QT_QPA_PLATFORM=offscreen ./dist/MyApp/MyApp   # 无头验证
 ```
+
+macOS 产物是真正的 `MyApp.app` bundle（含 Info.plist，`--bundle-id` 设置标识符），可直接走 codesign/notarization。
 
 签名后即可分发：`scripts/sign-app-windows.ps1`（signtool 签名 + 时间戳 + 验证）与 `scripts/sign-app-macos.sh`（codesign hardened runtime，可选 notarization + staple）。完整流程（含 CI 在干净 runner 上直接执行打包产物的检查）见 [docs/APP_PACKAGING.md](docs/APP_PACKAGING.md)。
 

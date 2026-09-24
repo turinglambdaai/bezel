@@ -77,12 +77,14 @@ QT_QPA_PLATFORM=offscreen racket scripts/showcase.rkt docs/showcase.png
 bezel/                # 元包：`raco pkg install bezel` 装齐下列全部
 bezel-lib/            # 核心库（collection `bezel`）
 ├── app.rkt           # make-application / run（泵循环）/ quit!
-├── widgets.rkt       # 构造器 + 共享控件 API + widget-grab-png + 表格/tooltip/几何
+├── widgets.rkt       # 构造器 + 共享控件 API + grab_png + 表格/树/日期/tooltip/几何
 ├── layouts.rkt       # 树形（vbox/hbox/grid/form/stretch）+ 命令式
-├── menus.rkt         # menu-bar / menu! / menu-action! / set-action-shortcut!
+├── menus.rkt         # menu-bar / menu! / set-action-shortcut! / 状态栏/工具栏
 ├── dialogs.rkt       # msg-information / warning / question + 文件对话框
 ├── signals.rkt       # connect! / disconnect! / emit-test-signal!
 ├── timers.rkt        # after! / every! / stop-timer!（纯 Racket 线程调度）
+├── desktop.rkt       # 剪贴板 + 系统托盘/通知
+├── sentry.rkt        # Sentry 兼容错误上报（纯 Racket，无 Qt 依赖，本地可测）
 ├── updates.rkt       # check-for-update / check-and-prompt-update!（静态 JSON 清单，尽力而为）
 ├── cli.rkt           # raco bezel doctor | package
 ├── main.rkt          # umbrella
@@ -100,8 +102,9 @@ bezel-shim/           # C++ shim（CMake；AUTOMOC 开）
 ├── include/bezel/bezel.h   # C ABI 契约（文档齐全）
 └── src/
     ├── core.cpp      # app 生命周期 / on_gui / 句柄注册表 / 信号队列
-    ├── widgets.cpp   # 控件构造器 + 值 API + grab_png + 表格/tooltip/几何
+    ├── widgets.cpp   # 控件构造器 + 值 API + grab_png + 表格/树/日期/tooltip/几何
     ├── dialogs.cpp   # 文件对话框（与 msg-* 同为阻塞式模态约定）
+    ├── tray.cpp       # 剪贴板 + 系统托盘（QClipboard/QSystemTrayIcon）
     ├── layouts.cpp   # 布局 / 菜单 / msg 对话框
     ├── signals.cpp   # 信号桥：sink 连接 + 队列 + emit 测试钩子
     ├── signalsink.h  # 每连接 sink（Q_OBJECT，AUTOMOC）

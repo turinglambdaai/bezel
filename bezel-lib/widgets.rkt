@@ -20,6 +20,8 @@
          make-progress
          make-list-widget
          make-table-widget
+         make-tree-widget
+         make-date-edit
 
          widget-show!
          widget-hide!
@@ -62,6 +64,26 @@
          table-set-header-labels!
          table-set-cell-text!
          table-cell-text
+
+         tree-set-header-labels!
+         tree-column-count
+         tree-add!
+         tree-count
+         tree-add-child!
+         tree-child-count
+         tree-item-text
+         tree-set-item-text!
+         tree-child-text
+         tree-set-child-text!
+         tree-current-row
+         tree-select!
+         tree-set-item-expanded!
+         tree-clear!
+
+         dateedit-set-date!
+         dateedit-date
+         dateedit-set-calendar-popup!
+         dateedit-set-display-format!
 
          widget-grab-png)
 
@@ -156,6 +178,16 @@
 (define (make-table-widget [parent #f] #:parent [kw-parent #f])
   (spawn 'make-table-widget (lambda (p) (bezel-table-new p))
          (resolve-parent-arg 'make-table-widget parent kw-parent)))
+
+;; QTreeWidget — items are addressed by top-level row (and child row).
+(define (make-tree-widget [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-tree-widget (lambda (p) (bezel-tree-new p))
+         (resolve-parent-arg 'make-tree-widget parent kw-parent)))
+
+;; QDateEdit — dates as (year month day) integers; see dateedit-*.
+(define (make-date-edit [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-date-edit (lambda (p) (bezel-dateedit-new p))
+         (resolve-parent-arg 'make-date-edit parent kw-parent)))
 
 ;; ---- QWidget shared API ------------------------------------------------------
 
@@ -357,6 +389,104 @@
   (define p (ok-string 'table-cell-text (bezel-table-cell-text (ptr-of t) row col)))
   (begin0 (cstring->string/utf8 p)
     (bezel-free p)))
+
+;; ---- trees --------------------------------------------------------------------
+;;
+;; QTreeWidget with row-addressed items: QTreeWidgetItem is not a QObject,
+;; so it never gets a handle. Item and header texts use Qt's
+;; '\n'-separated per-column convention (tree-add! t "Name\nSize").
+
+(define (tree-set-header-labels! t labels)
+  (require-alive! 'tree-set-header-labels! t)
+  (ok! 'tree-set-header-labels! (bezel-tree-set-header-labels (ptr-of t) labels)))
+
+(define (tree-column-count t)
+  (require-alive! 'tree-column-count t)
+  (geometry-ref 'tree-column-count (bezel-tree-column-count (ptr-of t))))
+
+;; Add a top-level item; returns its row index.
+(define (tree-add! t text)
+  (require-alive! 'tree-add! t)
+  (geometry-ref 'tree-add! (bezel-tree-add (ptr-of t) text)))
+
+(define (tree-count t)
+  (require-alive! 'tree-count t)
+  (geometry-ref 'tree-count (bezel-tree-count (ptr-of t))))
+
+;; Add a child under top-level `row`; returns the child's index within it.
+(define (tree-add-child! t row text)
+  (require-alive! 'tree-add-child! t)
+  (geometry-ref 'tree-add-child! (bezel-tree-add-child (ptr-of t) row text)))
+
+(define (tree-child-count t row)
+  (require-alive! 'tree-child-count t)
+  (geometry-ref 'tree-child-count (bezel-tree-child-count (ptr-of t) row)))
+
+(define (tree-item-text t row [col 0])
+  (require-alive! 'tree-item-text t)
+  (define p (ok-string 'tree-item-text (bezel-tree-item-text (ptr-of t) row col)))
+  (begin0 (cstring->string/utf8 p)
+    (bezel-free p)))
+
+(define (tree-set-item-text! t row col text)
+  (require-alive! 'tree-set-item-text! t)
+  (ok! 'tree-set-item-text! (bezel-tree-set-item-text (ptr-of t) row col text)))
+
+(define (tree-child-text t row child [col 0])
+  (require-alive! 'tree-child-text t)
+  (define p (ok-string 'tree-child-text (bezel-tree-child-text (ptr-of t) row child col)))
+  (begin0 (cstring->string/utf8 p)
+    (bezel-free p)))
+
+(define (tree-set-child-text! t row child col text)
+  (require-alive! 'tree-set-child-text! t)
+  (ok! 'tree-set-child-text! (bezel-tree-set-child-text (ptr-of t) row child col text)))
+
+(define (tree-current-row t)
+  (require-alive! 'tree-current-row t)
+  ;; -1 legitimately means "no selection"; only -1 with a fresh shim
+  ;; error is a failure (dead handle).
+  (value-or-error 'tree-current-row (bezel-tree-current-row (ptr-of t))))
+
+(define (tree-select! t row)
+  (require-alive! 'tree-select! t)
+  (ok! 'tree-select! (bezel-tree-select (ptr-of t) row)))
+
+(define (tree-set-item-expanded! t row expanded?)
+  (require-alive! 'tree-set-item-expanded! t)
+  (ok! 'tree-set-item-expanded!
+       (bezel-tree-set-item-expanded (ptr-of t) row (if expanded? 1 0))))
+
+(define (tree-clear! t)
+  (require-alive! 'tree-clear! t)
+  (ok! 'tree-clear! (bezel-tree-clear (ptr-of t))))
+
+;; ---- date editor ---------------------------------------------------------------
+;;
+;; (dateedit-set-date! e 2026 9 24) / (dateedit-date e) => '(2026 9 24).
+;; The shim packs the date as y*10000+m*100+d; years 1-9999 keep that
+;; positive, so -1 remains the error sentinel.
+
+(define (dateedit-set-date! e year month day)
+  (require-alive! 'dateedit-set-date! e)
+  (ok! 'dateedit-set-date! (bezel-dateedit-set-date (ptr-of e) year month day)))
+
+(define (dateedit-date e)
+  (require-alive! 'dateedit-date e)
+  (define packed (geometry-ref 'dateedit-date (bezel-dateedit-date (ptr-of e))))
+  (list (quotient packed 10000)
+        (remainder (quotient packed 100) 100)
+        (remainder packed 100)))
+
+(define (dateedit-set-calendar-popup! e popup?)
+  (require-alive! 'dateedit-set-calendar-popup! e)
+  (ok! 'dateedit-set-calendar-popup!
+       (bezel-dateedit-set-calendar-popup (ptr-of e) (if popup? 1 0))))
+
+;; Qt display format, e.g. "yyyy-MM-dd".
+(define (dateedit-set-display-format! e format)
+  (require-alive! 'dateedit-set-display-format! e)
+  (ok! 'dateedit-set-display-format! (bezel-dateedit-set-display-format (ptr-of e) format)))
 
 ;; ---- verification ----------------------------------------------------------------
 

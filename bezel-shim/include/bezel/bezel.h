@@ -214,6 +214,36 @@ BEZEL_EXPORT int bezel_table_set_header_labels(bezel_handle h, const char* label
 BEZEL_EXPORT int bezel_table_set_cell_text(bezel_handle h, int row, int col, const char* text);
 BEZEL_EXPORT const char* bezel_table_cell_text(bezel_handle h, int row, int col);
 
+/* Tree widget (QTreeWidget). Items are addressed by top-level row index
+ * (and, for children, (top-row, child-row)) because QTreeWidgetItem is
+ * not a QObject and cannot join the handle registry. Item texts use the
+ * same '\n'-separated per-column convention as the table headers. */
+BEZEL_EXPORT bezel_handle bezel_tree_new(bezel_handle parent);
+BEZEL_EXPORT int bezel_tree_column_count(bezel_handle h);
+BEZEL_EXPORT int bezel_tree_set_header_labels(bezel_handle h, const char* labels);
+BEZEL_EXPORT int bezel_tree_add(bezel_handle h, const char* text);
+BEZEL_EXPORT int bezel_tree_count(bezel_handle h);
+BEZEL_EXPORT int bezel_tree_add_child(bezel_handle h, int row, const char* text);
+BEZEL_EXPORT int bezel_tree_child_count(bezel_handle h, int row);
+BEZEL_EXPORT const char* bezel_tree_item_text(bezel_handle h, int row, int col);
+BEZEL_EXPORT int bezel_tree_set_item_text(bezel_handle h, int row, int col, const char* text);
+BEZEL_EXPORT const char* bezel_tree_child_text(bezel_handle h, int row, int child, int col);
+BEZEL_EXPORT int bezel_tree_set_child_text(bezel_handle h, int row, int child, int col,
+                                           const char* text);
+BEZEL_EXPORT int bezel_tree_current_row(bezel_handle h);
+BEZEL_EXPORT int bezel_tree_select(bezel_handle h, int row);
+BEZEL_EXPORT int bezel_tree_set_item_expanded(bezel_handle h, int row, int expanded);
+BEZEL_EXPORT int bezel_tree_clear(bezel_handle h);
+
+/* Date editor (QDateEdit). Dates cross the ABI as (year, month, day)
+ * integers; the getter packs them as year*10000 + month*100 + day so a
+ * single int round-trips (-1 with an error means a dead handle). */
+BEZEL_EXPORT bezel_handle bezel_dateedit_new(bezel_handle parent);
+BEZEL_EXPORT int bezel_dateedit_set_date(bezel_handle h, int year, int month, int day);
+BEZEL_EXPORT int bezel_dateedit_date(bezel_handle h);
+BEZEL_EXPORT int bezel_dateedit_set_calendar_popup(bezel_handle h, int popup);
+BEZEL_EXPORT int bezel_dateedit_set_display_format(bezel_handle h, const char* format);
+
 /* ------------------------------------------------------------------ */
 /* Layouts                                                             */
 /* ------------------------------------------------------------------ */
@@ -252,6 +282,34 @@ BEZEL_EXPORT bezel_handle bezel_menu_separator(bezel_handle menu);
 /* Keyboard shortcut for a menu action, e.g. "Ctrl+Q" / "Ctrl+S".
  * QKeySequence text; empty string clears the shortcut. */
 BEZEL_EXPORT int bezel_action_set_shortcut(bezel_handle action, const char* key);
+
+/* Window chrome: the QMainWindow status bar (created on first call) and
+ * tool bars. Toolbar actions are QAction handles — connect
+ * "triggered()" like menu actions. `timeout_ms` of 0 keeps the status
+ * message until the next one. */
+BEZEL_EXPORT bezel_handle bezel_window_statusbar(bezel_handle window);
+BEZEL_EXPORT int bezel_status_show_message(bezel_handle h, const char* message, int timeout_ms);
+BEZEL_EXPORT int bezel_status_clear_message(bezel_handle h);
+BEZEL_EXPORT const char* bezel_status_current_message(bezel_handle h);
+BEZEL_EXPORT bezel_handle bezel_window_toolbar(bezel_handle window, const char* title);
+BEZEL_EXPORT bezel_handle bezel_toolbar_add_action(bezel_handle toolbar, const char* text);
+
+/* Desktop integration: clipboard and the system tray.
+ *
+ * Clipboard requires an application (bezel_app_new). The tray needs an
+ * icon file path (an empty path leaves the platform default, which may
+ * render nothing — pass a real path for production use). `icon` for
+ * bezel_tray_show_message: 0 = information, 1 = warning, 2 = critical.
+ * Tray/context-menu signals such as activated(...) and messageClicked()
+ * deliver argless through the signal bridge. */
+BEZEL_EXPORT int bezel_clipboard_set_text(const char* text);
+BEZEL_EXPORT const char* bezel_clipboard_text(void);
+BEZEL_EXPORT bezel_handle bezel_tray_new(const char* icon_path, const char* tooltip);
+BEZEL_EXPORT int bezel_tray_set_tooltip(bezel_handle h, const char* tooltip);
+BEZEL_EXPORT int bezel_tray_set_visible(bezel_handle h, int visible);
+BEZEL_EXPORT int bezel_tray_show_message(bezel_handle h, const char* title, const char* text,
+                                         int icon, int timeout_ms);
+BEZEL_EXPORT int bezel_tray_set_menu(bezel_handle h, bezel_handle menu);
 
 /* ------------------------------------------------------------------ */
 /* Dialogs — modal conveniences                                        */

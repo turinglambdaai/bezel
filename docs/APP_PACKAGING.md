@@ -16,8 +16,10 @@ The command produces:
 ```text
 dist/MyApp/
 ├── MyApp[.exe]            # Windows: single exe with the Racket runtime embedded
-├── bin/MyApp              # macOS/Linux: launcher (raco distribute layout)
-├── lib/                   # macOS/Linux: Racket runtime libraries
+├── MyApp.app/             # macOS: real bundle (Info.plist; --bundle-id sets the id)
+│   └── Contents/MacOS/    #   bin/MyApp + lib/ + native/ live inside
+├── bin/MyApp              # Linux: launcher (raco distribute layout)
+├── lib/                   # Linux: Racket runtime libraries
 ├── [bin/]native/<os>-<arch>/   # libbezel + Qt + plugins, beside the executable
 └── RUNNING.txt
 ```
@@ -77,7 +79,19 @@ created once with `xcrun notarytool store-credentials`.
 **Linux** — no equivalent platform signing; distribute checksums (the
 release pipeline already publishes `SHA256SUMS` for runtime archives).
 
-## 4. Ship
+## 4. Crash reporting before you ship
+
+```racket
+(install-sentry-reporter! "https://<key>@o<org>.ingest.sentry.io/<project>"
+                          #:release "1.2.3")
+```
+
+Uncaught Racket exceptions are queued to Sentry in the background;
+native crashes inside Qt/libbezel are out of scope. Test with the same
+reporter against a local HTTP sink (see bezel-test/sentry.rkt for the
+recipe).
+
+## 5. Ship
 
 Zip (or `ditto` on macOS) the signed folder. End users need neither
 Racket nor Qt. Reminders:
@@ -89,7 +103,7 @@ Racket nor Qt. Reminders:
 - Keep `native/` beside the executable; the loader also honors
   `BEZEL_NATIVE_DIR`/`BEZEL_LIBRARY` for advanced deployment layouts.
 
-## 5. Tell users about updates
+## 6. Tell users about updates
 
 Host one static JSON file anywhere you control (release bucket, GitHub
 Pages, CDN) and check it from the app:

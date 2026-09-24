@@ -69,6 +69,10 @@ names follow @tt{make-widget} / @tt{widget-set-text!} conventions:
  @item{Timers: @racket[after!], @racket[every!], @racket[stop-timer!]}
  @item{Dialogs: @racket[msg-question], @racket[get-open-file-name],
        @racket[get-save-file-name]}
+ @item{Desktop integration: @racket[clipboard-set-text!],
+       @racket[make-tray], @racket[window-status-bar],
+       @racket[window-toolbar]}
+ @item{Error reporting: @racket[install-sentry-reporter!]}
  @item{Update checks: @racket[check-for-update],
        @racket[check-and-prompt-update!] — best-effort version-feed
        comparison with a native prompt}

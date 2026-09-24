@@ -297,6 +297,8 @@ jobs:
         run: |
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             exe=./app-dist/bezel-demo/bezel-demo.exe
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            exe=./app-dist/bezel-demo/bezel-demo.app/Contents/MacOS/bin/bezel-demo
           else
             exe=./app-dist/bezel-demo/bin/bezel-demo
           fi

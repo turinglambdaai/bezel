@@ -12,14 +12,16 @@ Racket's `racket/gui` is useful but difficult to style into a modern product UI.
 
 You get:
 
-- **Real Qt widgets** — windows, buttons, inputs, lists, sliders, tables, tabs, splitters, group boxes, dials, LCD numbers, menus, dialogs, layouts, plus generator-backed expansion.
+- **Real Qt widgets** — windows, buttons, inputs, lists, sliders, tables, trees, date pickers, tabs, splitters, group boxes, dials, LCD numbers, menus, toolbars, status bars, dialogs, layouts, plus generator-backed expansion.
 - **QSS styling** — Qt's CSS-like styling system.
 - **Thread-safe public API semantics** — public widget calls can originate from any Racket thread and marshal to the GUI thread.
 - **Timers** — `after!` / `every!` schedule Racket code that safely touches widgets from its own thread.
 - **Agent-friendly verification** — `widget-grab-png` renders real widgets to PNG; CI runs headlessly with Qt's offscreen backend.
 - **Checked native boundary** — the Racket layer validates the shim ABI before exposing the API.
 - **Portable release packages** — supported release targets embed `libbezel`, Qt runtime libraries, and required Qt plugins inside the Racket package; end users do not need Qt, CMake, or a C++ compiler.
-- **Final-application packaging** — `raco bezel package` turns an entry module into a self-contained executable-plus-runtime folder, with signing helpers for Windows and macOS.
+- **Final-application packaging** — `raco bezel package` turns an entry module into a self-contained executable-plus-runtime folder (a proper `.app` bundle on macOS), with signing helpers for Windows and macOS.
+- **Desktop integration** — clipboard, system tray with notifications, window status bars and toolbars.
+- **Error reporting hooks** — a Sentry-compatible reporter for uncaught Racket exceptions.
 - **Release diagnostics** — `raco bezel doctor` reports platform, architecture, runtime candidates, environment overrides, and ABI load status.
 
 <p align="center"><img src="docs/showcase.png" alt="Bezel Qt showcase rendered from Racket" width="720"></p>
@@ -108,14 +110,17 @@ See [docs/architecture.md](docs/architecture.md) for the deeper design.
 | Cross-thread public widget access | ✅ | ✅ | ✅ |
 | Generated-binding marshaling | ✅ | ✅ | ✅ |
 | Generated classes (tabs/stacked/splitter/dial/…) | ✅ | ✅ | ✅ |
-| Table widget + rich-text edit | ✅ | ✅ | ✅ |
+| Table/tree widgets + rich-text edit | ✅ | ✅ | ✅ |
+| Date editor | ✅ | ✅ | ✅ |
+| Clipboard + system tray | ✅ | ✅ | ✅ |
+| Sentry-compatible error reporting | ✅ | ✅ | ✅ |
 | Timers (`after!` / `every!`) | ✅ | ✅ | ✅ |
 | Native file dialogs | ✅ | ✅ | ✅ |
 | QSS styling | ✅ | ✅ | ✅ |
 | `widget-grab-png` | ✅ | ✅ | ✅ |
 | Headless real-object CI | ✅ | ✅ | ✅ |
 | Self-contained release package | Apple Silicon | x86_64 | x86_64 |
-| `raco bezel package` app bundles | ✅ | ✅ | ✅ |
+| `raco bezel package` app folders (`.app` on macOS) | ✅ | ✅ | ✅ |
 
 Unsupported Qt signal parameter types currently fall back to delivery without converted arguments. Bezel covers a broad, focused Widgets set today; the generator remains the expansion path rather than a claim of complete Qt coverage.
 
@@ -179,6 +184,29 @@ Plus a handwritten `QTableWidget`:
 (table-set-header-labels! t "Name\nScore\nNote")
 (table-set-cell-text! t 0 0 "Ada")
 (table-cell-text t 0 0)
+```
+
+### Desktop integration
+
+```racket
+(clipboard-set-text! (format "~a results" n))
+(define tray (make-tray "icon.png" "MyApp"))
+(tray-show! tray)
+(tray-notify! tray "Export finished" "results.csv written" #:icon 'information)
+(tray-set-menu! tray (menu! (menu-bar win) "Tray"))
+
+(status-show-message! (window-status-bar win) "Ready")
+(define act (toolbar-add-action! (window-toolbar win "Main") "Refresh"))
+(connect! act "triggered()" refresh!)
+```
+
+### Error reporting
+
+A best-effort, Sentry-compatible reporter for uncaught Racket exceptions — offline machines and dead DSNs never disturb the application:
+
+```racket
+(install-sentry-reporter! "https://<key>@o<org>.ingest.sentry.io/<project>"
+                          #:release "1.2.3")
 ```
 
 ### Timers
@@ -272,6 +300,8 @@ Run `raco bezel doctor` whenever native loading fails.
 raco bezel package --entry my-app.rkt --name MyApp --dest dist
 QT_QPA_PLATFORM=offscreen ./dist/MyApp/MyApp   # headless verification
 ```
+
+On macOS the output is a real `MyApp.app` bundle (Info.plist, `--bundle-id` to set the identifier) ready for codesign/notarization.
 
 Ship it after signing: `scripts/sign-app-windows.ps1` (signtool + timestamp + verify) and `scripts/sign-app-macos.sh` (codesign hardened runtime, optional notarization + stapling). The full walkthrough — including CI checks that execute the packaged binary on clean runners — is in [docs/APP_PACKAGING.md](docs/APP_PACKAGING.md).
 

@@ -14,6 +14,8 @@
 #include <QByteArray>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDate>
+#include <QDateEdit>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
@@ -28,6 +30,8 @@
 #include <QSpinBox>
 #include <QTableWidget>
 #include <QTableWidgetItem>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
 #include <QWidget>
 
 namespace {
@@ -390,6 +394,249 @@ BEZEL_EXPORT int bezel_action_set_shortcut(bezel_handle h, const char* key) {
         QAction* a = resolve_as<QAction>(h, "bezel_action_set_shortcut");
         if (!a) return 0;
         a->setShortcut(QKeySequence(QString::fromUtf8(key ? key : "")));
+        return 1;
+    });
+}
+
+// ---- tree widget ------------------------------------------------------------
+//
+// QTreeWidgetItem is not a QObject, so items never join the handle
+// registry; the API addresses them by (top-row) / (top-row, child-row).
+// The view owns every item it holds.
+
+namespace {
+
+QStringList split_columns(const char* text) {
+    // '\n'-separated per-column texts, the same convention as the table
+    // headers (QTreeWidgetItem takes a QStringList).
+    return QString::fromUtf8(text ? text : "").split(QLatin1Char('\n'));
+}
+
+}  // namespace
+
+BEZEL_EXPORT bezel_handle bezel_tree_new(bezel_handle parent) {
+    return on_gui([parent]() -> bezel_handle {
+        QWidget* p = parent ? resolve_widget(parent, "bezel_tree_new") : nullptr;
+        if (parent && !p) return nullptr;
+        return register_object(new QTreeWidget(p));
+    });
+}
+
+BEZEL_EXPORT int bezel_tree_column_count(bezel_handle h) {
+    return on_gui([h]() -> int {
+        QTreeWidget* t = resolve_as<QTreeWidget>(h, "bezel_tree_column_count");
+        return t ? t->columnCount() : -1;
+    });
+}
+
+BEZEL_EXPORT int bezel_tree_set_header_labels(bezel_handle h, const char* labels) {
+    return on_gui([h, labels]() -> int {
+        QTreeWidget* t = resolve_as<QTreeWidget>(h, "bezel_tree_set_header_labels");
+        if (!t) return 0;
+        t->setHeaderLabels(split_columns(labels));
+        return 1;
+    });
+}
+
+BEZEL_EXPORT int bezel_tree_add(bezel_handle h, const char* text) {
+    return on_gui([h, text]() -> int {
+        QTreeWidget* t = resolve_as<QTreeWidget>(h, "bezel_tree_add");
+        if (!t) return -1;
+        const int row = t->topLevelItemCount();
+        t->addTopLevelItem(new QTreeWidgetItem(split_columns(text)));
+        return row;
+    });
+}
+
+BEZEL_EXPORT int bezel_tree_count(bezel_handle h) {
+    return on_gui([h]() -> int {
+        QTreeWidget* t = resolve_as<QTreeWidget>(h, "bezel_tree_count");
+        return t ? t->topLevelItemCount() : -1;
+    });
+}
+
+BEZEL_EXPORT int bezel_tree_add_child(bezel_handle h, int row, const char* text) {
+    return on_gui([h, row, text]() -> int {
+        QTreeWidget* t = resolve_as<QTreeWidget>(h, "bezel_tree_add_child");
+        if (!t) return -1;
+        QTreeWidgetItem* parent = t->topLevelItem(row);
+        if (!parent) {
+            set_error("bezel_tree_add_child: no top-level item %d in a tree of %d items",
+                      row, t->topLevelItemCount());
+            return -1;
+        }
+        return parent->addChild(new QTreeWidgetItem(split_columns(text)));
+    });
+}
+
+BEZEL_EXPORT int bezel_tree_child_count(bezel_handle h, int row) {
+    return on_gui([h, row]() -> int {
+        QTreeWidget* t = resolve_as<QTreeWidget>(h, "bezel_tree_child_count");
+        if (!t) return -1;
+        QTreeWidgetItem* item = t->topLevelItem(row);
+        if (!item) {
+            set_error("bezel_tree_child_count: no top-level item %d in a tree of %d items",
+                      row, t->topLevelItemCount());
+            return -1;
+        }
+        return item->childCount();
+    });
+}
+
+BEZEL_EXPORT const char* bezel_tree_item_text(bezel_handle h, int row, int col) {
+    return on_gui([h, row, col]() -> const char* {
+        QTreeWidget* t = resolve_as<QTreeWidget>(h, "bezel_tree_item_text");
+        if (!t) return nullptr;
+        QTreeWidgetItem* item = t->topLevelItem(row);
+        if (!item) {
+            set_error("bezel_tree_item_text: no top-level item %d in a tree of %d items",
+                      row, t->topLevelItemCount());
+            return nullptr;
+        }
+        return strdup_q(item->text(col));
+    });
+}
+
+BEZEL_EXPORT int bezel_tree_set_item_text(bezel_handle h, int row, int col, const char* text) {
+    return on_gui([h, row, col, text]() -> int {
+        QTreeWidget* t = resolve_as<QTreeWidget>(h, "bezel_tree_set_item_text");
+        if (!t) return 0;
+        QTreeWidgetItem* item = t->topLevelItem(row);
+        if (!item) {
+            set_error("bezel_tree_set_item_text: no top-level item %d in a tree of %d items",
+                      row, t->topLevelItemCount());
+            return 0;
+        }
+        item->setText(col, QString::fromUtf8(text ? text : ""));
+        return 1;
+    });
+}
+
+BEZEL_EXPORT const char* bezel_tree_child_text(bezel_handle h, int row, int child, int col) {
+    return on_gui([h, row, child, col]() -> const char* {
+        QTreeWidget* t = resolve_as<QTreeWidget>(h, "bezel_tree_child_text");
+        if (!t) return nullptr;
+        QTreeWidgetItem* item = t->topLevelItem(row);
+        if (!item || !item->child(child)) {
+            set_error("bezel_tree_child_text: no child %d under top-level item %d",
+                      child, row);
+            return nullptr;
+        }
+        return strdup_q(item->child(child)->text(col));
+    });
+}
+
+BEZEL_EXPORT int bezel_tree_set_child_text(bezel_handle h, int row, int child, int col,
+                                           const char* text) {
+    return on_gui([h, row, child, col, text]() -> int {
+        QTreeWidget* t = resolve_as<QTreeWidget>(h, "bezel_tree_set_child_text");
+        if (!t) return 0;
+        QTreeWidgetItem* item = t->topLevelItem(row);
+        if (!item || !item->child(child)) {
+            set_error("bezel_tree_set_child_text: no child %d under top-level item %d",
+                      child, row);
+            return 0;
+        }
+        item->child(child)->setText(col, QString::fromUtf8(text ? text : ""));
+        return 1;
+    });
+}
+
+BEZEL_EXPORT int bezel_tree_current_row(bezel_handle h) {
+    return on_gui([h]() -> int {
+        QTreeWidget* t = resolve_as<QTreeWidget>(h, "bezel_tree_current_row");
+        if (!t) return -1;
+        return t->indexOfTopLevelItem(t->currentItem());
+    });
+}
+
+BEZEL_EXPORT int bezel_tree_select(bezel_handle h, int row) {
+    return on_gui([h, row]() -> int {
+        QTreeWidget* t = resolve_as<QTreeWidget>(h, "bezel_tree_select");
+        if (!t) return 0;
+        QTreeWidgetItem* item = t->topLevelItem(row);
+        if (!item) {
+            set_error("bezel_tree_select: no top-level item %d in a tree of %d items",
+                      row, t->topLevelItemCount());
+            return 0;
+        }
+        t->setCurrentItem(item);
+        return 1;
+    });
+}
+
+BEZEL_EXPORT int bezel_tree_set_item_expanded(bezel_handle h, int row, int expanded) {
+    return on_gui([h, row, expanded]() -> int {
+        QTreeWidget* t = resolve_as<QTreeWidget>(h, "bezel_tree_set_item_expanded");
+        if (!t) return 0;
+        QTreeWidgetItem* item = t->topLevelItem(row);
+        if (!item) {
+            set_error("bezel_tree_set_item_expanded: no top-level item %d in a tree of %d items",
+                      row, t->topLevelItemCount());
+            return 0;
+        }
+        if (expanded) t->expandItem(item); else t->collapseItem(item);
+        return 1;
+    });
+}
+
+BEZEL_EXPORT int bezel_tree_clear(bezel_handle h) {
+    return on_gui([h]() -> int {
+        QTreeWidget* t = resolve_as<QTreeWidget>(h, "bezel_tree_clear");
+        if (!t) return 0;
+        t->clear();
+        return 1;
+    });
+}
+
+// ---- date editor -------------------------------------------------------------
+
+BEZEL_EXPORT bezel_handle bezel_dateedit_new(bezel_handle parent) {
+    return on_gui([parent]() -> bezel_handle {
+        QWidget* p = parent ? resolve_widget(parent, "bezel_dateedit_new") : nullptr;
+        if (parent && !p) return nullptr;
+        return register_object(new QDateEdit(p));
+    });
+}
+
+BEZEL_EXPORT int bezel_dateedit_set_date(bezel_handle h, int year, int month, int day) {
+    return on_gui([h, year, month, day]() -> int {
+        QDateEdit* e = resolve_as<QDateEdit>(h, "bezel_dateedit_set_date");
+        if (!e) return 0;
+        const QDate d(year, month, day);
+        if (!d.isValid()) {
+            set_error("bezel_dateedit_set_date: %04d-%02d-%02d is not a valid date",
+                      year, month, day);
+            return 0;
+        }
+        e->setDate(d);
+        return 1;
+    });
+}
+
+BEZEL_EXPORT int bezel_dateedit_date(bezel_handle h) {
+    return on_gui([h]() -> int {
+        QDateEdit* e = resolve_as<QDateEdit>(h, "bezel_dateedit_date");
+        if (!e) return -1;
+        const QDate d = e->date();
+        return d.year() * 10000 + d.month() * 100 + d.day();
+    });
+}
+
+BEZEL_EXPORT int bezel_dateedit_set_calendar_popup(bezel_handle h, int popup) {
+    return on_gui([h, popup]() -> int {
+        QDateEdit* e = resolve_as<QDateEdit>(h, "bezel_dateedit_set_calendar_popup");
+        if (!e) return 0;
+        e->setCalendarPopup(popup != 0);
+        return 1;
+    });
+}
+
+BEZEL_EXPORT int bezel_dateedit_set_display_format(bezel_handle h, const char* format) {
+    return on_gui([h, format]() -> int {
+        QDateEdit* e = resolve_as<QDateEdit>(h, "bezel_dateedit_set_display_format");
+        if (!e) return 0;
+        e->setDisplayFormat(QString::fromUtf8(format ? format : ""));
         return 1;
     });
 }

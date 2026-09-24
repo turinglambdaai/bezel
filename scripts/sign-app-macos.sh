@@ -21,23 +21,41 @@ app_dir="${1:?usage: sign-app-macos.sh <app-dir> <identity>}"
 identity="${2:?usage: sign-app-macos.sh <app-dir> <identity>}"
 profile="${NOTARY_PROFILE:-}"
 
-# Deepest-first so nested bundles/frameworks sign before their parents.
-targets=$(find "$app_dir" -type f \( -name '*.dylib' -o -name '*.so' -o -perm -111 \) | sort -r)
+# App bundles (.app from `raco bezel package`) are signed as bundles:
+# innermost first, then the bundle seal. Plain folders are signed file
+# by file (deepest first).
+app_bundles=$(find "$app_dir" -name '*.app' -maxdepth 3 -type d || true)
 
-echo "Signing with: $identity"
-while IFS= read -r file; do
-    codesign --force --timestamp --options runtime --sign "$identity" "$file"
-    codesign --verify --strict "$file"
-    echo "  signed: $file"
-done <<< "$targets"
+if [[ -n "$app_bundles" ]]; then
+    while IFS= read -r bundle; do
+        echo "Signing bundle: $bundle (inside-out)"
+        find "$bundle" -type f \( -name '*.dylib' -o -name '*.so' -perm -111 \) | sort -r |
+        while IFS= read -r file; do
+            codesign --force --timestamp --options runtime --sign "$identity" "$file"
+        done
+        codesign --force --timestamp --options runtime --sign "$identity" "$bundle"
+        codesign --verify --strict "$bundle"
+        echo "  signed: $bundle"
+    done <<< "$app_bundles"
+    notary_target=$(head -n1 <<< "$app_bundles")
+else
+    notary_target="$app_dir"
+    targets=$(find "$app_dir" -type f \( -name '*.dylib' -o -name '*.so' -o -perm -111 \) | sort -r)
+    echo "Signing with: $identity"
+    while IFS= read -r file; do
+        codesign --force --timestamp --options runtime --sign "$identity" "$file"
+        codesign --verify --strict "$file"
+        echo "  signed: $file"
+    done <<< "$targets"
+fi
 
 if [[ -n "$profile" ]]; then
-    echo "Notarizing $app_dir (profile: $profile)"
+    echo "Notarizing $notary_target (profile: $profile)"
     archive="$(mktemp -d)/app.zip"
-    ditto -c -k --keepParent "$app_dir" "$archive"
+    ditto -c -k --keepParent "$notary_target" "$archive"
     xcrun notarytool submit "$archive" --keychain-profile "$profile" --wait
-    xcrun stapler staple "$app_dir"
-    spctl -a -t execute -vv "$app_dir" || true
+    xcrun stapler staple "$notary_target"
+    spctl -a -t execute -vv "$notary_target" || true
     echo "Notarization + stapling complete."
 else
     echo "NOTARY_PROFILE not set — skipping notarization."

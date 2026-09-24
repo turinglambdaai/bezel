@@ -11,6 +11,8 @@
 #include <QMainWindow>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QStatusBar>
+#include <QToolBar>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -183,6 +185,58 @@ BEZEL_EXPORT bezel_handle bezel_menu_separator(bezel_handle menu) {
         if (!m) return nullptr;
         m->addSeparator();
         return nullptr;  // separators have no useful handle
+    });
+}
+
+// ---- window chrome -----------------------------------------------------------
+
+BEZEL_EXPORT bezel_handle bezel_window_statusbar(bezel_handle window) {
+    return on_gui([window]() -> bezel_handle {
+        QMainWindow* win = resolve_as<QMainWindow>(window, "bezel_window_statusbar");
+        if (!win) return nullptr;
+        return register_object(win->statusBar());  // created on first call
+    });
+}
+
+BEZEL_EXPORT int bezel_status_show_message(bezel_handle h, const char* message, int timeout_ms) {
+    return on_gui([h, message, timeout_ms]() -> int {
+        QStatusBar* s = resolve_as<QStatusBar>(h, "bezel_status_show_message");
+        if (!s) return 0;
+        s->showMessage(QString::fromUtf8(message ? message : ""), timeout_ms);
+        return 1;
+    });
+}
+
+BEZEL_EXPORT int bezel_status_clear_message(bezel_handle h) {
+    return on_gui([h]() -> int {
+        QStatusBar* s = resolve_as<QStatusBar>(h, "bezel_status_clear_message");
+        if (!s) return 0;
+        s->clearMessage();
+        return 1;
+    });
+}
+
+BEZEL_EXPORT const char* bezel_status_current_message(bezel_handle h) {
+    return on_gui([h]() -> const char* {
+        QStatusBar* s = resolve_as<QStatusBar>(h, "bezel_status_current_message");
+        return s ? strdup_q(s->currentMessage()) : nullptr;
+    });
+}
+
+BEZEL_EXPORT bezel_handle bezel_window_toolbar(bezel_handle window, const char* title) {
+    return on_gui([window, title]() -> bezel_handle {
+        QMainWindow* win = resolve_as<QMainWindow>(window, "bezel_window_toolbar");
+        if (!win) return nullptr;
+        QToolBar* bar = win->addToolBar(QString::fromUtf8(title ? title : ""));
+        return register_object(bar);
+    });
+}
+
+BEZEL_EXPORT bezel_handle bezel_toolbar_add_action(bezel_handle toolbar, const char* text) {
+    return on_gui([toolbar, text]() -> bezel_handle {
+        QToolBar* bar = resolve_as<QToolBar>(toolbar, "bezel_toolbar_add_action");
+        if (!bar) return nullptr;
+        return register_object(bar->addAction(QString::fromUtf8(text ? text : "")));
     });
 }
 
