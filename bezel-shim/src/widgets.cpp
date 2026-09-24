@@ -465,7 +465,11 @@ BEZEL_EXPORT int bezel_tree_add_child(bezel_handle h, int row, const char* text)
                       row, t->topLevelItemCount());
             return -1;
         }
-        return parent->addChild(new QTreeWidgetItem(split_columns(text)));
+        // QTreeWidgetItem::addChild returns void; the new child's index
+        // is the pre-add child count.
+        const int child = parent->childCount();
+        parent->addChild(new QTreeWidgetItem(split_columns(text)));
+        return child;
     });
 }
 
