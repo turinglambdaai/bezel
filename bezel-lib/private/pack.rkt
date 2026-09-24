@@ -121,6 +121,9 @@
                           (list (path->string entry-path))))
        (unless (file-exists? staged-exe)
          (die "raco exe did not produce ~a" (path->string staged-exe)))
+       ;; raco distribute creates the destination itself but not the
+       ;; intermediate directories leading to it.
+       (make-directory* distribute-dest)
        (run-raco! (list "distribute" (path->string distribute-dest)
                         (path->string staged-exe)))
        ;; distribute places console executables under bin/ on Unix
