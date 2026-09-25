@@ -295,6 +295,8 @@ SCRIPT
   (define info (check-for-update #:feed feed-url
                                  #:current (version-file-read)
                                  #:timeout-ms timeout-ms))
+  (eprintf "UPDATE: check => ~a
+" (and info (update-info-version info)))
   (cond
     [(not info) #f]
     [else
@@ -302,11 +304,15 @@ SCRIPT
        (download-update! (update-info-url info)
                          #:sha1 (hash-ref (fetch-feed-json feed-url timeout-ms)
                                           'sha1 #f)))
+     (eprintf "UPDATE: download => ~a
+" (and downloaded 1))
      (cond
        [(not downloaded)
         (on-error "update download failed")
         #f]
        [else
+        (eprintf "UPDATE: spawning swapper
+")
         (apply-update! downloaded)
         (exit 0)])]))
 
