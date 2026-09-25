@@ -137,6 +137,9 @@
   (define seen (box #f))
   (connect! sp "splitterMoved(int,int)" (lambda (pos index) (set-box! seen (list pos index))))
   (emit-test-signal! sp "splitterMoved(int,int)" (list 10 20))
+  (sleep 0.5)
+  (eprintf "SPLIT-DEBUG: seen after 0.5s = ~a
+" (unbox seen))
   (check-true (wait-for (lambda () (equal? (list 10 20) (unbox seen))))
               "both int arguments should arrive typed"))
 
