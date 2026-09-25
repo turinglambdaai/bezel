@@ -18,6 +18,10 @@
 
 (putenv "QT_QPA_PLATFORM" "offscreen")
 
+(define (wait-for pred [n 100])
+  (let loop ([n n])
+    (or (pred) (and (> n 0) (begin (sleep 0.02) (loop (sub1 n)))))))
+
 (make-application #:name "bezel-test-desktop")
 
 ;; ---- tree -----------------------------------------------------------------
@@ -105,10 +109,7 @@
   (define fired (box #f))
   (connect! act "triggered()" (lambda _ (set-box! fired #t)))
   (emit-test-signal! act "triggered()")
-  (define (wait-for pred [n 100])
-    (let loop ([n n])
-      (or (pred) (and (> n 0) (begin (sleep 0.02) (loop (sub1 n)))))))
-  (check-true (wait-for (lambda () (unbox fired)))))
+  (check-not-false (wait-for (lambda () (unbox fired)))))
 
 ;; ---- clipboard + tray -----------------------------------------------------------
 
