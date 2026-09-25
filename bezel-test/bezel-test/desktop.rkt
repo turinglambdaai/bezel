@@ -129,6 +129,18 @@
   (check-not-exn (lambda () (tray-hide! tray)))
   (check-true (bezel-alive? tray)))
 
+(test-case "window title readback, visibility, focus"
+  (define win (make-window #:title "Readable 标题"))
+  (check-equal? (widget-window-title win) "Readable 标题")
+  (set-window-title! win "Renamed")
+  (check-equal? (widget-window-title win) "Renamed")
+  (check-false (widget-visible? win) "never shown yet")
+  (widget-show! win)
+  (check-true (widget-visible? win))
+  (define field (make-line-edit "type here"))
+  (layout! win (vbox field))
+  (check-not-exn (lambda () (widget-focus! field))))
+
 (test-case "typed (int,int) signals: both arguments arrive"
   ;; splitterMoved(int,int): same (int,int) shape as cellChanged
   (define sp (splitter-new))

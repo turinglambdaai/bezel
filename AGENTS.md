@@ -82,7 +82,8 @@ bezel-lib/            # 核心库（collection `bezel`）
 ├── menus.rkt         # menu-bar / menu! / set-action-shortcut! / 状态栏/工具栏
 ├── dialogs.rkt       # msg-information / warning / question + 文件对话框
 ├── signals.rkt       # connect! / disconnect! / emit-test-signal!
-├── timers.rkt        # after! / every! / stop-timer!（纯 Racket 线程调度）
+├── timers.rkt        # after! / every! / stop-timer! / stop-all-timers!（cleanup 时清场）
+├── version.rkt       # bezel-version 唯一版本源（check-version 校验）
 ├── desktop.rkt       # 剪贴板 + 系统托盘/通知
 ├── sentry.rkt        # Sentry 兼容错误上报（纯 Racket，无 Qt 依赖，本地可测）
 ├── observable.rkt    # 数据绑定（observe! 初始同步推送，watcher 独立线程）

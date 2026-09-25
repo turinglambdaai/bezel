@@ -21,6 +21,7 @@
          "signals.rkt"
          "timers.rkt"
          "updates.rkt"
+         "version.rkt"
          "widgets.rkt"
          "generated/dial_gen.rkt"
          "generated/doublespin_gen.rkt"
@@ -73,4 +74,6 @@
  ;; object model (bezel-alive?, bezel-delete!, qt-object-name, ...)
  (all-from-out "private/objects.rkt")
  ;; error type (exn:fail:bezel? and friends)
- (all-from-out "private/errors.rkt"))
+ (all-from-out "private/errors.rkt")
+ ;; the Bezel version (single source: version.rkt)
+ (all-from-out "version.rkt"))

@@ -362,8 +362,10 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           hdiutil attach app-dist/*.dmg -mountpoint /Volumes/bezel-demo-test -nobrowse
-          ls /Volumes/bezel-demo-test   # dmg root IS the app folder contents
-          ls /Volumes/bezel-demo-test/bezel-demo.app
+          ls /Volumes/bezel-demo-test/bezel-demo   # staged folder layout
+          ls /Volumes/bezel-demo-test/bezel-demo/bezel-demo.app
+          test -L /Volumes/bezel-demo-test/Applications \
+            || { echo "drag-to-install symlink missing"; exit 1; }
           hdiutil detach /Volumes/bezel-demo-test
 
       - name: Self-update end to end (v1 -> v2)

@@ -34,7 +34,8 @@
          racket/list
          racket/match
          racket/port
-         racket/string)
+         racket/string
+         "version.rkt")
 
 ;; ---- DSN parsing --------------------------------------------------------------
 
@@ -96,7 +97,7 @@
 
 ;; ---- sending ----------------------------------------------------------------------
 
-(define client-name "bezel/0.3.0")
+(define client-name (format "bezel/~a" bezel-version))
 
 ;; POST one event to the store endpoint. Returns #t on a completed
 ;; request, #f for every failure (network, HTTP, serialization).

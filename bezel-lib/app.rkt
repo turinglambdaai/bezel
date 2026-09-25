@@ -14,6 +14,7 @@
          "private/errors.rkt"
          "private/marshal.rkt"
          "private/raw.rkt"
+         "timers.rkt"
          "widgets.rkt")
 
 ;; Opaque marker for the QApplication. The C side owns the real object;
@@ -91,4 +92,5 @@
   ;; Racket closures too so repeated app lifecycles do not retain user
   ;; state indefinitely.
   (clear-handlers!)
+  (stop-all-timers!)  ; a late tick would otherwise raise "no application"
   (set-current-application! #f))

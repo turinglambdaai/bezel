@@ -10,8 +10,8 @@
 ;; Handlers run on their own Racket thread, not the dispatcher: plain
 ;; computation is fine there, and widget calls marshal to the GUI thread
 ;; like any other cross-thread call. Pending timers do not keep `run`
-;; alive; after bezel-cleanup! a late handler fails normally (no
-;; application), so stop timers before teardown when that matters.
+;; alive; bezel-cleanup! retires them via stop-all-timers!, so a late
+;; tick no longer surfaces "no application" after teardown.
 ;;
 ;; after!: an exception in the handler cancels that timer. every!: an
 ;; exception is reported to current-error-port and the interval keeps
@@ -20,6 +20,7 @@
 (provide after!
          every!
          stop-timer!
+         stop-all-timers!
          bezel-timer?
          bezel-timer-running?)
 
@@ -32,6 +33,28 @@
 
 (define (bezel-timer-running? timer)
   (bezel-timer-on timer))
+
+;; Registry so application teardown can retire every pending timer in
+;; one sweep.
+(define registry '())
+(define registry-lock (make-semaphore 1))
+
+(define (register-timer! timer)
+  (semaphore-wait registry-lock)
+  (dynamic-wind
+      void
+      (lambda () (set! registry (cons timer registry)))
+      (lambda () (semaphore-post registry-lock))))
+
+(define (stop-all-timers!)
+  (semaphore-wait registry-lock)
+  (define pending
+    (dynamic-wind
+        void
+        (lambda () (begin0 registry (set! registry '())))
+        (lambda () (semaphore-post registry-lock))))
+  (for ([t (in-list pending)]) (set-bezel-timer-on! t #f))
+  (void))
 
 ;; Sleep in slices so stop-timer! is honored promptly; a plain (sleep s)
 ;; would ignore a stop request for the whole interval.
@@ -54,6 +77,7 @@
   (unless (procedure? thunk)
     (raise-argument-error 'after! "procedure?" thunk))
   (define timer (bezel-timer #t))
+  (register-timer! timer)
   (thread
    (lambda ()
      (sleep-until-stopped! timer (/ ms 1000.0))
@@ -71,6 +95,7 @@
   (unless (procedure? thunk)
     (raise-argument-error 'every! "procedure?" thunk))
   (define timer (bezel-timer #t))
+  (register-timer! timer)
   (thread
    (lambda ()
      (let loop ()

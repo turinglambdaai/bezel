@@ -37,11 +37,16 @@
   (capture-version 'changelog
                    #px"## +([0-9]+[.][0-9]+[.][0-9]+)"
                    "CHANGELOG.md"))
+(define version-module-version
+  (capture-version 'version-module
+                   #px"define +bezel-version +\"([0-9]+[.][0-9]+[.][0-9]+)\""
+                   "bezel-lib/version.rkt"))
 
 (define versions
   `((bezel-lib . ,lib-version)
     (bezel . ,umbrella-version)
     (bezel-shim . ,shim-version)
+    (version-module . ,version-module-version)
     (changelog . ,changelog-version)))
 
 (for ([entry (in-list versions)])

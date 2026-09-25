@@ -50,6 +50,15 @@ final-application packaging/signing helpers.
   widget calls marshal to the GUI thread.
 - **Typed `(int,int)` signals** (cellChanged, splitterMoved, ...) through
   a new `dispatchII` sink slot.
+- **Timer lifecycle**: `bezel-cleanup!` now sweeps every pending timer
+  (`stop-all-timers!`); a late tick no longer raises "no application"
+  after teardown.
+- **Version single source**: `bezel/version.rkt` (`bezel-version`),
+  validated by check-version and surfaced in `raco bezel doctor`.
+- **Widget API gaps**: `widget-focus!`, `widget-visible?`,
+  `widget-window-title` (readback).
+- **macOS dmg drag-to-install**: the installer dmg stages the app beside
+  an /Applications symlink.
 - **Best-effort update checks**: `check-for-update` /
   `check-and-prompt-update!` against a static JSON version feed
   (`version`/`url`/`notes`), with padded dotted-version comparison,

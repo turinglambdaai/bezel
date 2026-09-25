@@ -272,11 +272,18 @@
              (path->string (build-path dest-root (format "~a-~a-setup.exe" name version))))]
     [(eq? (system-type) 'macosx)
      (define dmg (build-path dest-root (format "~a-~a.dmg" name version)))
-     (run-tool! "hdiutil" (find-executable-path "hdiutil")
+     ;; Stage the app beside an /Applications symlink so the standard
+     ;; drag-to-install gesture works; hdiutil preserves the link.
+     (define staging (make-temporary-file "bezel-dmg~a" 'directory))
+     (copy-directory/files app-dir (build-path staging name))
+     (run-tool! "ln" (find-executable-path "/bin/ln")
+                (list "-s" "/Applications" (path->string (build-path staging "Applications"))))
+     (run-tool! "hdiutil" (find-executable-path "/usr/bin/hdiutil")
                 (list "create" "-volname" name
-                      "-srcfolder" (path->string app-dir)
+                      "-srcfolder" (path->string staging)
                       "-format" "UDZO"
                       "-ov" (path->string dmg)))
+     (delete-directory/files staging)
      (printf "  installer:     ~a\n" (path->string dmg))]
     [else
      (define tool (appimagetool-path))

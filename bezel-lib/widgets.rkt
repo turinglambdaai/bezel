@@ -34,6 +34,9 @@
          set-widget-stylesheet!
          set-tooltip!
          widget-tooltip
+         widget-focus!
+         widget-visible?
+         widget-window-title
          widget-width
          widget-height
          widget-x
@@ -241,6 +244,24 @@
 (define (widget-tooltip w)
   (require-alive! 'widget-tooltip w)
   (define p (ok-string 'widget-tooltip (bezel-widget-tooltip (ptr-of w))))
+  (begin0 (cstring->string/utf8 p)
+    (bezel-free p)))
+
+;; Give the widget keyboard focus (menu shortcuts need a focused window).
+(define (widget-focus! w)
+  (require-alive! 'widget-focus! w)
+  (ok! 'widget-focus! (bezel-widget-set-focus (ptr-of w))))
+
+(define (widget-visible? w)
+  (require-alive! 'widget-visible? w)
+  (define r (bezel-widget-is-visible (ptr-of w)))
+  (cond [(= r -1) (raise-bezel-error 'widget-visible?)]
+        [(= r 1) #t] [else #f]))
+
+;; Read back a top-level window's title (empty string for plain widgets).
+(define (widget-window-title w)
+  (require-alive! 'widget-window-title w)
+  (define p (ok-string 'widget-window-title (bezel-window-title (ptr-of w))))
   (begin0 (cstring->string/utf8 p)
     (bezel-free p)))
 

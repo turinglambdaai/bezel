@@ -5,7 +5,8 @@
          racket/match
          racket/path
          racket/string
-         "private/platform.rkt")
+         "private/platform.rkt"
+         "version.rkt")
 
 (define (env-display name)
   (define v (getenv name))
@@ -16,6 +17,7 @@
 
 (define (doctor)
   (displayln "Bezel native runtime diagnostics")
+  (displayln (format "  Bezel:         ~a" bezel-version))
   (displayln (format "  Racket:        ~a" (version)))
   (displayln (format "  OS:            ~a" (system-type 'os*)))
   (displayln (format "  architecture:  ~a" (system-type 'arch)))

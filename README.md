@@ -218,7 +218,7 @@ A best-effort, Sentry-compatible reporter for uncaught Racket exceptions — off
 ```racket
 (after! 500 (lambda () (widget-set-text! status "done")))
 (define clock (every! 100 (lambda () (widget-set-value! bar (tick)))))
-(stop-timer! clock)
+(stop-timer! clock)          ; or stop-all-timers! (also run by bezel-cleanup!)
 ```
 
 Handlers run on their own Racket thread; widget calls inside them marshal to the GUI thread automatically.

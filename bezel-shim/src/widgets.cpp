@@ -266,6 +266,29 @@ BEZEL_EXPORT const char* bezel_widget_tooltip(bezel_handle h) {
     });
 }
 
+BEZEL_EXPORT int bezel_widget_set_focus(bezel_handle h) {
+    return on_gui([h]() -> int {
+        QWidget* w = resolve_widget(h, "bezel_widget_set_focus");
+        if (!w) return 0;
+        w->setFocus(Qt::OtherFocusReason);
+        return 1;
+    });
+}
+
+BEZEL_EXPORT int bezel_widget_is_visible(bezel_handle h) {
+    return on_gui([h]() -> int {
+        QWidget* w = resolve_widget(h, "bezel_widget_is_visible");
+        return w ? (w->isVisible() ? 1 : 0) : -1;
+    });
+}
+
+BEZEL_EXPORT const char* bezel_window_title(bezel_handle h) {
+    return on_gui([h]() -> const char* {
+        QWidget* w = resolve_widget(h, "bezel_window_title");
+        return w ? strdup_q(w->windowTitle()) : nullptr;
+    });
+}
+
 BEZEL_EXPORT int bezel_widget_width(bezel_handle h) {
     return on_gui([h]() -> int {
         QWidget* w = resolve_widget(h, "bezel_widget_width");

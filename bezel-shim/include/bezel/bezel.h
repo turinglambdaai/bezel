@@ -161,6 +161,15 @@ BEZEL_EXPORT const unsigned char* bezel_widget_grab_png(bezel_handle h, int* len
 BEZEL_EXPORT int bezel_widget_set_tooltip(bezel_handle h, const char* text);
 BEZEL_EXPORT const char* bezel_widget_tooltip(bezel_handle h);
 
+/* Give the widget keyboard focus. */
+BEZEL_EXPORT int bezel_widget_set_focus(bezel_handle h);
+
+/* 1 when the widget is visible (a hidden parent hides it too). */
+BEZEL_EXPORT int bezel_widget_is_visible(bezel_handle h);
+
+/* Read back a top-level window's title (empty for plain widgets). */
+BEZEL_EXPORT const char* bezel_window_title(bezel_handle h);
+
 /* Geometry readers return -1 with an error on bezel_last_error when the
  * handle is dead or unknown. */
 BEZEL_EXPORT int bezel_widget_width(bezel_handle h);
