@@ -25,16 +25,10 @@
 (define (marker) (getenv "BEZEL_SMOKE_MARKER"))
 
 (when (feed)
-  (eprintf "SMOKE: updating current=~a feed=~a
-" (app-version) (feed))
-  (flush-output)
   ;; Silent self-update: on success this exits and the swapper
   ;; relaunches the new version; on "no update" it returns #f and we
   ;; fall through to the marker + quit path.
-  (auto-update! #:feed (feed))
-  (eprintf "SMOKE: no update applied
-")
-  (flush-output))
+  (auto-update! #:feed (feed)))
 
 (when (marker)
   (with-handlers ([exn:fail? void])
