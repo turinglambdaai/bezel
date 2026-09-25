@@ -26,6 +26,7 @@ public slots:
     void dispatch0();
     void dispatchB(bool a);
     void dispatchI(int a);
+    void dispatchII(int a, int b);
     void dispatchD(double a);
     void dispatchS(const QString& a);
 
@@ -41,7 +42,9 @@ private:
 
 // Connect `target`'s signal to a fresh sink; returns the connection id
 // (0 on failure). `norm_sig` is the normalized signature without the
-// Qt '2' prefix, e.g. "clicked()".
+// Qt '2' prefix, e.g. "clicked()". Typed delivery converts the first
+// argument (bool/int/double/QString); the (int,int) pair — cellChanged,
+// splitterMoved, and friends — converts both.
 int64_t sink_connect(QObject* target, const QByteArray& norm_sig);
 
 }  // namespace bezel

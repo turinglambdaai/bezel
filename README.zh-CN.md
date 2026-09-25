@@ -114,6 +114,10 @@ Bezel 有意把 native 边界控制得很小：
 | 日期编辑器 | ✅ | ✅ | ✅ |
 | 剪贴板 + 系统托盘 | ✅ | ✅ | ✅ |
 | Sentry 兼容错误上报 | ✅ | ✅ | ✅ |
+| 数据绑定（observable） | ✅ | ✅ | ✅ |
+| `(int,int)` 类型化信号 | ✅ | ✅ | ✅ |
+| 平台安装器（Inno/dmg/AppImage） | ✅ | ✅ | ✅ |
+| 静默自更新 + 重启 | ✅ | ✅ | ✅ |
 | 定时器（`after!` / `every!`） | ✅ | ✅ | ✅ |
 | 原生文件对话框 | ✅ | ✅ | ✅ |
 | QSS 样式 | ✅ | ✅ | ✅ |
@@ -243,7 +247,11 @@ Handler 运行在各自的 Racket 线程上；其中的控件调用会自动编�
            #:parent win)))
 ```
 
-想自己做提示 UI 时用 `check-for-update`，它直接返回 `update-info`。
+想自己做提示 UI 时用 `check-for-update`，它直接返回 `update-info`。`auto-update!` 则是完全静默的路径——清单的 `url` 指向打包目录的 zip（可选 `sha1` 校验）；进程外的更新器等应用退出、替换目录、重启新版本：
+
+```racket
+(after! 2000 (lambda () (auto-update! #:feed "https://example.com/myapp-updates.json")))
+```
 
 ### 信号
 
@@ -307,7 +315,7 @@ raco bezel package --entry my-app.rkt --name MyApp --dest dist
 QT_QPA_PLATFORM=offscreen ./dist/MyApp/MyApp   # 无头验证
 ```
 
-macOS 产物是真正的 `MyApp.app` bundle（含 Info.plist，`--bundle-id` 设置标识符），可直接走 codesign/notarization。
+macOS 产物是真正的 `MyApp.app` bundle（含 Info.plist，`--bundle-id` 设置标识符），可直接走 codesign/notarization。 `--installer` 额外产出平台安装器——Windows 用 Inno Setup、macOS 出 dmg、Linux 出 AppImage；`--app-version` 写入 `auto-update!` 回读的 VERSION 文件。
 
 签名后即可分发：`scripts/sign-app-windows.ps1`（signtool 签名 + 时间戳 + 验证）与 `scripts/sign-app-macos.sh`（codesign hardened runtime，可选 notarization + staple）。完整流程（含 CI 在干净 runner 上直接执行打包产物的检查）见 [docs/APP_PACKAGING.md](docs/APP_PACKAGING.md)。
 

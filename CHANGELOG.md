@@ -37,6 +37,19 @@ final-application packaging/signing helpers.
 - **macOS .app bundles**: `raco bezel package` wraps macOS output in a
   real bundle with Info.plist (`--bundle-id`); the signing helper signs
   bundles inside-out.
+- **Silent self-update**: `auto-update!` downloads the new app archive
+  (optional SHA-1 verification), then an out-of-process swapper waits for
+  exit, replaces the app folder, and relaunches — CI drives the full
+  v1→v2 swap on all three release targets.
+- **Platform installers**: `raco bezel package --installer` produces an
+  Inno Setup installer (Windows, silently installable), a dmg (macOS),
+  and an AppImage (Linux) around the same app folder; `--app-version`
+  stamps the VERSION file updates read back.
+- **Observables**: `make-observable` / `observe!` / `set-observable!` /
+  `unobserve!` — synchronous initial push, own-thread watchers whose
+  widget calls marshal to the GUI thread.
+- **Typed `(int,int)` signals** (cellChanged, splitterMoved, ...) through
+  a new `dispatchII` sink slot.
 - **Best-effort update checks**: `check-for-update` /
   `check-and-prompt-update!` against a static JSON version feed
   (`version`/`url`/`notes`), with padded dotted-version comparison,

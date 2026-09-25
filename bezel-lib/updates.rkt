@@ -29,12 +29,21 @@
 (provide (struct-out update-info)
          newer-version?
          check-for-update
-         check-and-prompt-update!)
+         check-and-prompt-update!
+         download-update!
+         apply-update!
+         auto-update!
+         packaged-app-root)
 
 (require json
+         file/sha1
+         racket/format
          net/sendurl
          net/url
+         racket/file
          racket/list
+         racket/match
+         racket/path
          racket/port
          racket/string
          "dialogs.rkt")
@@ -126,3 +135,172 @@
                      #:title "Update available")])
          (when open? (send-url (update-info-url info)))
          info)))
+
+;; ---- silent self-update ---------------------------------------------------
+;;
+;; The full loop: check a feed, download the new application archive
+;; (the zip of the folder `raco bezel package` produced), verify an
+;; optional SHA-256, then hand off to a tiny out-of-process swapper.
+;;
+;; Replacing a running application in place is platform-hostile (Windows
+;; locks the running exe, macOS keeps the bundle mapped), so the swap
+;; happens from outside the process: apply-update! writes a small
+;; script that waits for this process to exit, swaps the directory, and
+;; relaunches. The caller exits right after apply-update! returns.
+
+;; The app folder produced by raco bezel package, derived from the
+;; running executable's location (exe at root on Windows, under bin/ on
+;; Linux, under <name>.app/Contents/MacOS/bin/ on macOS).
+(define (packaged-app-root)
+  (define exe (find-executable-path (find-system-path 'exec-file)))
+  (unless exe (error 'packaged-app-root "cannot locate the running executable"))
+  (define dir (path-only exe))
+  (case (system-type)
+    [(windows) dir]
+    [(macosx) (simplify-path (build-path dir 'up 'up 'up 'up))]
+    [else (simplify-path (build-path dir 'up))]))
+
+;; Best-effort download of the update archive (any URL the feed's `url`
+;; names; usually the same host as the feed). Returns the downloaded
+;; file path or #f. `expected-sha1` (hex string) is optional.
+(define (download-update! url [dest #f] #:sha1 [expected-sha1 #f])
+  (with-handlers ([exn:fail? (lambda (e) #f)])
+    (define out (or dest (make-temporary-file "bezel-update~a.zip")))
+    (call-with-output-file out
+      #:exists 'replace
+      (lambda (o)
+        (call/input-url (string->url url) get-pure-port
+                        (lambda (i) (copy-port i o)))))
+    (and (file-exists? out)
+         (or (not expected-sha1)
+             (string=? (string-downcase expected-sha1)
+                       (bytes->hex-string (sha1 (file->bytes out)))))
+         out)))
+
+(define (app-name-from-root app-root)
+  (path->string (last (explode-path (simplify-path app-root)))))
+
+(define swapper-sh-template
+  #<<SCRIPT
+#!/bin/sh
+# Bezel self-update swapper: wait -> extract -> swap -> relaunch.
+APP_DIR="$1"; ARCHIVE="$2"; EXE_REL="$3"; APP_PID="$4"
+while kill -0 "$APP_PID" 2>/dev/null; do sleep 0.2; done
+PARENT="$(dirname "$APP_DIR")"
+TMP="$PARENT/.bezel-update-tmp.$$"
+mkdir -p "$TMP"
+if command -v unzip >/dev/null 2>&1; then
+  unzip -q "$ARCHIVE" -d "$TMP"
+else
+  python3 - "$ARCHIVE" "$TMP" <<'PY'
+import sys, zipfile
+zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])
+PY
+fi
+NEW="$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+if [ -z "$NEW" ]; then rm -rf "$TMP"; exit 1; fi
+mv "$APP_DIR" "$APP_DIR.old.$$"
+mv "$NEW" "$APP_DIR"
+rm -rf "$APP_DIR.old.$$" "$TMP"
+"$APP_DIR/$EXE_REL" &
+SCRIPT
+)
+
+(define swapper-ps1-template
+  #<<SCRIPT
+param($AppDir, $Archive, $ExeRel, $AppPid)
+# Bezel self-update swapper: wait -> extract -> swap -> relaunch.
+Wait-Process -Id $AppPid -ErrorAction SilentlyContinue
+$parent = Split-Path -Parent $AppDir
+$tmp = Join-Path $parent ".bezel-update-tmp"
+if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
+Expand-Archive -Path $Archive -DestinationPath $tmp -Force
+$new = Get-ChildItem -Path $tmp -Directory | Select-Object -First 1
+if (-not $new) { exit 1 }
+$old = "$AppDir.old"
+if (Test-Path $old) { Remove-Item -Recurse -Force $old }
+Rename-Item $AppDir "$AppDir.old" -ErrorAction Stop
+Move-Item $new.FullName $AppDir
+Remove-Item -Recurse -Force $old, $tmp
+Start-Process -FilePath (Join-Path $AppDir $ExeRel)
+SCRIPT
+)
+
+;; Spawn the out-of-process swapper for `archive` (a zip of the new app
+;; folder). Does not wait; the caller should (exit 0) immediately after.
+;; Relaunches the new version on success.
+(define (apply-update! archive)
+  (unless (file-exists? archive)
+    (raise-argument-error 'apply-update! "(and/c path? file-exists?)" archive))
+  (define app-root (packaged-app-root))
+  (define exe-rel
+    (case (system-type)
+      [(windows)
+       (path->string (build-path (app-name-from-root app-root)
+                                 (~a (app-name-from-root app-root) ".exe")))]
+      [(macosx)
+       (path->string (build-path (~a (app-name-from-root app-root) ".app")
+                                 "Contents" "MacOS" "bin"
+                                 (app-name-from-root app-root)))]
+      [else (path->string (build-path "bin" (app-name-from-root app-root)))]))
+  (define archive-path (path->string (path->complete-path archive)))
+  (case (system-type)
+    [(windows)
+     (define script (make-temporary-file "bezel-swap~a.ps1"))
+     (display-to-file swapper-ps1-template script #:exists 'replace)
+     (define args
+       (list "-NoProfile" "-WindowStyle" "Hidden" "-ExecutionPolicy" "Bypass"
+             "-File" (path->string script)
+             "-AppDir" (path->string app-root)
+             "-Archive" archive-path
+             "-ExeRel" exe-rel
+             "-AppPid" (~a (system-type (quote pid)))))
+     (subprocess #f #f #f (find-executable-path "powershell.exe") args)
+     (void)]
+    [else
+     (define script (make-temporary-file "bezel-swap~a.sh"))
+     (display-to-file swapper-sh-template script #:exists 'replace)
+     (subprocess #f #f #f "/bin/sh"
+                 (list (path->string script)
+                       (path->string app-root)
+                       archive-path
+                       exe-rel
+                       (~a (system-type (quote pid)))))
+     (void)]))
+
+;; Check -> download -> verify -> apply -> exit. Silent by design: returns
+;; #f when no update exists or the download failed; never returns when the
+;; update applies (the process exits and the swapper relaunches the new
+;; version). Feed entries may add "sha1" over the archive named by "url".
+(define (auto-update! #:feed feed-url
+                      #:timeout-ms [timeout-ms 5000]
+                      #:on-error [on-error void])
+  (define info (check-for-update #:feed feed-url
+                                 #:current (version-file-read)
+                                 #:timeout-ms timeout-ms))
+  (cond
+    [(not info) #f]
+    [else
+     (define downloaded
+       (download-update! (update-info-url info)
+                         #:sha1 (hash-ref (fetch-feed-json feed-url timeout-ms)
+                                          'sha1 #f)))
+     (cond
+       [(not downloaded)
+        (on-error "update download failed")
+        #f]
+       [else
+        (apply-update! downloaded)
+        (exit 0)])]))
+
+;; ---- packaged version discovery -----------------------------------------------
+
+;; The VERSION file raco bezel package writes into the app folder.
+(define (version-file-read)
+  (with-handlers ([exn:fail? (lambda (_) "0.0.0")])
+    (string-trim
+     (file->string (build-path (packaged-app-root) "VERSION")))))
+
+(define (fetch-feed-json feed-url timeout-ms)
+  (with-handlers ([exn:fail? (lambda (_) (hasheq))])
+    (call/input-url (string->url feed-url) get-pure-port read-json)))

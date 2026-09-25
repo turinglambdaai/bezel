@@ -128,4 +128,13 @@
   (check-not-exn (lambda () (tray-hide! tray)))
   (check-true (bezel-alive? tray)))
 
+(test-case "typed (int,int) signals: table cellChanged through the bridge"
+  (define t (make-table-widget))
+  (table-set-dimensions! t 2 2)
+  (define seen (box #f))
+  (connect! t "cellChanged(int,int)" (lambda (row col) (set-box! seen (list row col))))
+  (table-set-cell-text! t 1 0 "edited")
+  (check-true (wait-for (lambda () (equal? (list 1 0) (unbox seen))))
+              "both int arguments should arrive typed"))
+
 (displayln "bezel-test/desktop: all tests passed")

@@ -76,7 +76,9 @@
                       #:dest [dest "dist"]
                       #:runtime-dir [runtime-dir #f]
                       #:gui? [gui? #f]
-                      #:bundle-id [bundle-id #f])
+                      #:bundle-id [bundle-id #f]
+                      #:app-version [app-version #f]
+                      #:installer? [installer? #f])
   (define entry-path (path->complete-path entry))
   (unless (file-exists? entry-path)
     (die "entry module does not exist: ~a" (path->string entry-path)))
@@ -170,7 +172,10 @@
   (make-directory* (build-path exe-dir "native"))
   (copy-directory/files runtime-root native-dest)
 
-  ;; 3. Ship run + sign instructions next to the binary.
+  ;; 3. Ship run + sign instructions next to the binary, plus the
+  ;;    version marker auto-update! reads back on the next run.
+  (define version (or app-version "1.0.0"))
+  (display-to-file version (build-path app-dir "VERSION") #:exists 'replace)
   (display-lines-to-file
    (list (format "To run: keep native/ beside ~a (and lib/ where present)." exe-name)
          (if macos?
@@ -182,4 +187,125 @@
    #:exists 'replace)
 
   (printf "  application:   ~a\n" (path->string (simple-form-path app-dir)))
+  (when installer? (build-installer! app-dir name exe-path version))
   (printf "bezel package: done\n"))
+
+;; ---- platform installers -------------------------------------------------------
+;;
+;; Windows: Inno Setup (ISCC.exe on PATH or in the default Program Files
+;; location). macOS: hdiutil (built-in). Linux: appimagetool (on PATH or
+;; $APPIMAGETOOL; https://github.com/AppImage/appimagetool/releases).
+;; The installer only wraps the folder produced above — the app itself is
+;; identical either way.
+
+(define (find-tool candidates)
+  (for/or ([c (in-list candidates)])
+    (and c (file-exists? c) c)))
+
+(define (run-tool! what exe args)
+  (printf "  $ ~a ~a\n" (path->string exe) (string-join args " "))
+  (define-values (sp out in err)
+    (apply subprocess #f #f #f exe args))
+  (close-output-port in)
+  (copy-port out (current-output-port))
+  (copy-port err (current-error-port))
+  (subprocess-wait sp)
+  (define code (subprocess-status sp))
+  (close-input-port out)
+  (close-input-port err)
+  (unless (zero? code) (die "~a failed with exit code ~a" what code)))
+
+(define (env-path name)
+  (define v (getenv name))
+  (and v (non-empty-string? v) (string->path v)))
+
+(define (inno-compiler)
+  (or (find-executable-path "ISCC.exe")
+      (find-tool (filter values
+                         (list (and (env-path "ProgramFiles(x86)")
+                                    (build-path (env-path "ProgramFiles(x86)") "Inno Setup 6" "ISCC.exe"))
+                               (and (env-path "ProgramFiles")
+                                    (build-path (env-path "ProgramFiles") "Inno Setup 6" "ISCC.exe")))))))
+
+(define (appimagetool-path)
+  (or (find-executable-path "appimagetool")
+      (let ([env (getenv "APPIMAGETOOL")])
+        (and env (file-exists? env) (string->path env)))))
+
+(define (write-inno-script! app-dir name exe-name version)
+  (define iss (build-path app-dir "installer.iss"))
+  (display-to-file
+   (string-append
+    "[Setup]\n"
+    (format "AppName=~a\n" name)
+    (format "AppVersion=~a\n" version)
+    (format "DefaultDirName={autopf}\\~a\n" name)
+    (format "DefaultGroupName=~a\n" name)
+    "OutputDir=..\n"
+    (format "OutputBaseFilename=~a-~a-setup\n" name version)
+    "Compression=lzma2\nSolidCompression=yes\nArchitecturesInstallIn64BitMode=x64compatible\n"
+    "[Files]\n"
+    (format "Source: \"~a\\*\"; DestDir: \"{app}\"; Flags: recursesubdirs; Excludes: \"installer.iss\"\n" name)
+    "[Icons]\n"
+    (format "Name: \"{group}\\~a\"; Filename: \"{app}\\~a\"\n" name exe-name)
+    (format "Name: \"{autodesktop}\\~a\"; Filename: \"{app}\\~a\"\n" name exe-name))
+   iss
+   #:exists 'replace)
+  iss)
+
+(define (build-installer! app-dir name exe-path version)
+  (define dest-root (path-only app-dir))
+  (define exe-name (if (eq? (system-type) 'windows)
+                       (~a name ".exe")
+                       (path->string (find-relative-path app-dir exe-path))))
+  (cond
+    [(eq? (system-type) 'windows)
+     (define iscc (inno-compiler))
+     (unless iscc
+       (die "installer requested but ISCC.exe not found — install Inno Setup 6 or add it to PATH"))
+     (define exe-basename (~a name ".exe"))
+     (define iss (write-inno-script! app-dir name exe-basename version))
+     ;; Run from the app dir so Inno's relative Source/OutputDir resolve.
+     (parameterize ([current-directory app-dir])
+       (run-tool! "Inno Setup" iscc (list (path->string (build-path "." "installer.iss")))))
+     (printf "  installer:     ~a\n"
+             (path->string (build-path dest-root (format "~a-~a-setup.exe" name version))))]
+    [(eq? (system-type) 'macosx)
+     (define dmg (build-path dest-root (format "~a-~a.dmg" name version)))
+     (run-tool! "hdiutil" (find-executable-path "hdiutil")
+                (list "create" "-volname" name
+                      "-srcfolder" (path->string app-dir)
+                      "-format" "UDZO"
+                      "-ov" (path->string dmg)))
+     (printf "  installer:     ~a\n" (path->string dmg))]
+    [else
+     (define tool (appimagetool-path))
+     (unless tool
+       (die "installer requested but appimagetool not found — set $APPIMAGETOOL or PATH"))
+     (define appdir (build-path dest-root (format ".~a-appdir" name)))
+     (when (directory-exists? appdir) (delete-directory/files appdir))
+     (make-directory* appdir)
+     ;; AppDir: the whole application tree plus AppRun/.desktop/icon.
+     (for ([entry (in-list (directory-list app-dir))])
+       (copy-directory/files (build-path app-dir entry) (build-path appdir entry)))
+     (display-to-file
+      (format "#!/bin/sh\nHERE=\"$(dirname \"$(readlink -f \"$0\")\")\"\nexec \"$HERE\"/~a \"$@\"\n"
+              (path->string (find-relative-path app-dir exe-path)))
+      (build-path appdir "AppRun")
+      #:exists 'replace)
+     (display-to-file
+      (string-append
+       (format "[Desktop Entry]\nType=Application\nName=~a\n" name)
+       (format "Exec=~a\nIcon=~a\nCategories=Utility;\n" name name)
+       "Terminal=false\n")
+      (build-path appdir (format "~a.desktop" name))
+      #:exists 'replace)
+     (define icon-src (or (find-tool (list (build-path (or (getenv "BEZEL_ASSETS") ".") "default-app-icon.png")
+                                          "assets/default-app-icon.png"))
+                          (die "default icon not found (assets/default-app-icon.png)")))
+     (copy-file icon-src (build-path appdir (~a name ".png")) #t)
+     (define out (build-path dest-root (format "~a-~a.AppImage" name version)))
+     (run-tool! "appimagetool" tool
+                (list (path->string appdir) (path->string out)))
+     (delete-directory/files appdir)
+     (printf "  installer:     ~a\n" (path->string out))]))

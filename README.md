@@ -114,6 +114,10 @@ See [docs/architecture.md](docs/architecture.md) for the deeper design.
 | Date editor | ✅ | ✅ | ✅ |
 | Clipboard + system tray | ✅ | ✅ | ✅ |
 | Sentry-compatible error reporting | ✅ | ✅ | ✅ |
+| Observables (data binding) | ✅ | ✅ | ✅ |
+| `(int,int)` typed signals | ✅ | ✅ | ✅ |
+| Platform installers (Inno/dmg/AppImage) | ✅ | ✅ | ✅ |
+| Silent self-update + relaunch | ✅ | ✅ | ✅ |
 | Timers (`after!` / `every!`) | ✅ | ✅ | ✅ |
 | Native file dialogs | ✅ | ✅ | ✅ |
 | QSS styling | ✅ | ✅ | ✅ |
@@ -122,7 +126,7 @@ See [docs/architecture.md](docs/architecture.md) for the deeper design.
 | Self-contained release package | Apple Silicon | x86_64 | x86_64 |
 | `raco bezel package` app folders (`.app` on macOS) | ✅ | ✅ | ✅ |
 
-Unsupported Qt signal parameter types currently fall back to delivery without converted arguments. Bezel covers a broad, focused Widgets set today; the generator remains the expansion path rather than a claim of complete Qt coverage.
+Unsupported Qt signal parameter types fall back to delivery without converted arguments (`(int,int)` pairs and single `bool`/`int`/`double`/`QString` arguments convert). Bezel deliberately scopes to professional-tools UI on Qt Widgets: the model/view framework, Qt Quick/QML, and WebEngine/WebView embedding are not covered — the generator remains the expansion path for further Widgets classes.
 
 ## API tour
 
@@ -241,7 +245,11 @@ Host one static JSON feed (`version` / `url` / optional `notes`) next to your re
            #:parent win)))
 ```
 
-`check-for-update` returns the raw `update-info` when you want your own presentation.
+`check-for-update` returns the raw `update-info` when you want your own presentation. `auto-update!` is the fully silent path — the feed's `url` points at the zipped app folder (`sha1` optional); an out-of-process updater waits for exit, swaps the folder, and relaunches:
+
+```racket
+(after! 2000 (lambda () (auto-update! #:feed "https://example.com/myapp-updates.json")))
+```
 
 ### Signals
 
@@ -301,7 +309,7 @@ raco bezel package --entry my-app.rkt --name MyApp --dest dist
 QT_QPA_PLATFORM=offscreen ./dist/MyApp/MyApp   # headless verification
 ```
 
-On macOS the output is a real `MyApp.app` bundle (Info.plist, `--bundle-id` to set the identifier) ready for codesign/notarization.
+On macOS the output is a real `MyApp.app` bundle (Info.plist, `--bundle-id` to set the identifier) ready for codesign/notarization. `--installer` additionally builds the platform installer — Inno Setup on Windows, a dmg on macOS, an AppImage on Linux — and `--app-version` stamps the VERSION file `auto-update!` reads back.
 
 Ship it after signing: `scripts/sign-app-windows.ps1` (signtool + timestamp + verify) and `scripts/sign-app-macos.sh` (codesign hardened runtime, optional notarization + stapling). The full walkthrough — including CI checks that execute the packaged binary on clean runners — is in [docs/APP_PACKAGING.md](docs/APP_PACKAGING.md).
 

@@ -85,7 +85,8 @@ bezel-lib/            # 核心库（collection `bezel`）
 ├── timers.rkt        # after! / every! / stop-timer!（纯 Racket 线程调度）
 ├── desktop.rkt       # 剪贴板 + 系统托盘/通知
 ├── sentry.rkt        # Sentry 兼容错误上报（纯 Racket，无 Qt 依赖，本地可测）
-├── updates.rkt       # check-for-update / check-and-prompt-update!（静态 JSON 清单，尽力而为）
+├── observable.rkt    # 数据绑定（observe! 初始同步推送，watcher 独立线程）
+├── updates.rkt       # check/提示/静默自更新（auto-update! 外置 swapper：等退出→换目录→重启）
 ├── cli.rkt           # raco bezel doctor | package
 ├── main.rkt          # umbrella
 └── private/

@@ -33,6 +33,7 @@
          "generated/tabs_gen.rkt"
          "layouts.rkt"
          "menus.rkt"
+         "observable.rkt"
          "private/errors.rkt"
          "private/objects.rkt")
 
@@ -55,6 +56,8 @@
  (all-from-out "generated/tabs_gen.rkt")
  ;; menus
  (all-from-out "menus.rkt")
+ ;; observables (data binding)
+ (all-from-out "observable.rkt")
  ;; dialogs
  (all-from-out "dialogs.rkt")
  ;; desktop integration (clipboard, system tray)

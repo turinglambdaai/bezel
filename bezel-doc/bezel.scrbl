@@ -73,6 +73,9 @@ names follow @tt{make-widget} / @tt{widget-set-text!} conventions:
        @racket[make-tray], @racket[window-status-bar],
        @racket[window-toolbar]}
  @item{Error reporting: @racket[install-sentry-reporter!]}
+ @item{Data binding: @racket[make-observable], @racket[observe!],
+       @racket[set-observable!]}
+ @item{Silent self-update: @racket[auto-update!]}
  @item{Update checks: @racket[check-for-update],
        @racket[check-and-prompt-update!] — best-effort version-feed
        comparison with a native prompt}

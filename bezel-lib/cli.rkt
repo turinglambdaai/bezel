@@ -63,10 +63,11 @@
     ["--runtime-dir" 'runtime-dir]
     ["--gui" 'gui]
     ["--bundle-id" 'bundle-id]
+    ["--app-version" 'app-version]
     [_ #f]))
 
 ;; Boolean flags carry no value.
-(define boolean-flags '(gui))
+(define boolean-flags '(gui installer))
 
 (define (parse-package-flags args)
   (let loop ([args args] [flags '()])
@@ -104,7 +105,9 @@
    #:runtime-dir (and (flag-ref flags 'runtime-dir)
                       (path->complete-path (flag-ref flags 'runtime-dir)))
    #:gui? (and (flag-ref flags 'gui) #t)
-   #:bundle-id (flag-ref flags 'bundle-id)))
+   #:bundle-id (flag-ref flags 'bundle-id)
+   #:app-version (flag-ref flags 'app-version)
+   #:installer? (and (flag-ref flags 'installer) #t)))
 
 (define args (vector->list (current-command-line-arguments)))
 (cond

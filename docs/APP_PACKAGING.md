@@ -125,5 +125,23 @@ Feed format (update it when you publish a release):
 ```
 
 Failures are quiet (`#f`), so a dead URL or an offline machine never
-disrupts startup. This is a check-and-notify flow; downloading and
-replacing the application remains a distribution-channel decision.
+disrupts startup.
+
+For silent updates, point the feed's `url` at the **zipped app folder**
+(add `sha1` to verify the archive) and call:
+
+```racket
+(auto-update! #:feed "https://example.com/myapp-updates.json")
+```
+
+On success this never returns: an out-of-process swapper waits for the
+app to exit, replaces the folder, and relaunches the new version. The
+current version comes from the VERSION file written by
+`raco bezel package --app-version`.
+
+## 7. Build installers
+
+`raco bezel package --installer` wraps the same folder in the platform
+installer: Inno Setup on Windows (silently installable for fleet
+deployment), a dmg on macOS, an AppImage on Linux. Tools needed on the
+build machine: ISCC.exe, hdiutil (built-in), appimagetool respectively.
