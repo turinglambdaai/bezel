@@ -53,7 +53,8 @@
   (string-append
    "usage: raco bezel package --entry <module.rkt> --name <AppName>\n"
    "                      [--dest <dir>] [--runtime-dir <dir>] [--gui]\n"
-   "                      [--bundle-id <reverse-dns-id>]\n"))
+   "                      [--bundle-id <reverse-dns-id>] [--app-version <x.y.z>]\n"
+   "                      [--installer]\n"))
 
 (define (flag->key flag)
   (match flag
@@ -64,6 +65,7 @@
     ["--gui" 'gui]
     ["--bundle-id" 'bundle-id]
     ["--app-version" 'app-version]
+    ["--installer" 'installer]
     [_ #f]))
 
 ;; Boolean flags carry no value.
