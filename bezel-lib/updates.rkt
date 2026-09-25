@@ -201,7 +201,10 @@ APP_DIR="$1"; ARCHIVE="$2"; EXE_REL="$3"; APP_PID="$4"
 LOG="$(dirname "$APP_DIR")/.bezel-swap.log"
 exec >> "$LOG" 2>&1
 echo "=== swap start $(date) pid=$$ app=$APP_DIR"
-while kill -0 "$APP_PID" 2>/dev/null; do sleep 0.2; done
+# kill -0 0 would always succeed (process group); 0 means "skip waiting"
+if [ "$APP_PID" != "0" ]; then
+  while kill -0 "$APP_PID" 2>/dev/null; do sleep 0.2; done
+fi
 PARENT="$(dirname "$APP_DIR")"
 TMP="$PARENT/.bezel-update-tmp.$$"
 mkdir -p "$TMP"
@@ -261,28 +264,28 @@ SCRIPT
                                  (app-name-from-root app-root)))]
       [else (path->string (build-path "bin" (app-name-from-root app-root)))]))
   (define archive-path (path->string (path->complete-path archive)))
+  (define pid (~a (getpid-ffi)))
   (case (system-type)
     [(windows)
      (define script (make-temporary-file "bezel-swap~a.ps1"))
      (display-to-file swapper-ps1-template script #:exists 'replace)
-     (define args
-       (list "-NoProfile" "-WindowStyle" "Hidden" "-ExecutionPolicy" "Bypass"
-             "-File" (path->string script)
-             "-AppDir" (path->string app-root)
-             "-Archive" archive-path
-             "-ExeRel" exe-rel
-             "-AppPid" (~a (getpid-ffi))))
-     (subprocess #f #f #f (find-executable-path "powershell.exe") args)
+     ;; Start-Process detaches the swapper so this process can exit
+     ;; without the runtime waiting on (or tearing down) the child.
+     (define inner
+       (format "-NoProfile -ExecutionPolicy Bypass -File ~s -AppDir ~s -Archive ~s -ExeRel ~s -AppPid ~s"
+               (path->string script) (path->string app-root) archive-path exe-rel pid))
+     (apply subprocess #f #f #f (find-executable-path "powershell.exe")
+            (list "-NoProfile" "-Command"
+                  (format "Start-Process -WindowStyle Hidden powershell ~s" inner)))
      (void)]
     [else
      (define script (make-temporary-file "bezel-swap~a.sh"))
      (display-to-file swapper-sh-template script #:exists 'replace)
-     (apply subprocess #f #f #f "/bin/sh"
-            (list (path->string script)
-                  (path->string app-root)
-                  archive-path
-                  exe-rel
-                  (~a (getpid-ffi))))
+     ;; sh -c '... &' returns immediately; the swapper outlives us.
+     (define cmd
+       (format "nohup /bin/sh '~a' '~a' '~a' '~a' '~a' >/dev/null 2>&1 &"
+               (path->string script) (path->string app-root) archive-path exe-rel pid))
+     (subprocess #f #f #f "/bin/sh" (list "-c" cmd))
      (void)]))
 
 ;; Check -> download -> verify -> apply -> exit. Silent by design: returns
