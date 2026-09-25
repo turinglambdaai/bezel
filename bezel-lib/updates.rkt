@@ -156,10 +156,15 @@
   (define exe (find-executable-path (find-system-path 'exec-file)))
   (unless exe (error 'packaged-app-root "cannot locate the running executable"))
   (define dir (path-only exe))
-  (case (system-type)
-    [(windows) dir]
-    [(macosx) (simplify-path (build-path dir 'up 'up 'up 'up))]
-    [else (simplify-path (build-path dir 'up))]))
+  (define root
+    (case (system-type)
+      [(windows) dir]
+      [(macosx) (build-path dir 'up 'up 'up 'up)]
+      [else (build-path dir 'up)]))
+  ;; path-only/simplify-path keep a trailing slash; `mv` fails when the
+  ;; destination carries one and does not exist, so strip separators.
+  (string->path
+   (string-trim (path->string root) "/" #:left? #f)))
 
 ;; Best-effort download of the update archive (any URL the feed's `url`
 ;; names; usually the same host as the feed). Returns the downloaded
@@ -193,6 +198,9 @@
 #!/bin/sh
 # Bezel self-update swapper: wait -> extract -> swap -> relaunch.
 APP_DIR="$1"; ARCHIVE="$2"; EXE_REL="$3"; APP_PID="$4"
+LOG="$(dirname "$APP_DIR")/.bezel-swap.log"
+exec >> "$LOG" 2>&1
+echo "=== swap start $(date) pid=$$ app=$APP_DIR"
 while kill -0 "$APP_PID" 2>/dev/null; do sleep 0.2; done
 PARENT="$(dirname "$APP_DIR")"
 TMP="$PARENT/.bezel-update-tmp.$$"
