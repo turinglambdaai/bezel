@@ -135,7 +135,11 @@
   (splitter-add-widget sp (make-label "a"))
   (splitter-add-widget sp (make-label "b"))
   (define seen (box #f))
-  (connect! sp "splitterMoved(int,int)" (lambda (pos index) (set-box! seen (list pos index))))
+  (connect! sp "splitterMoved(int,int)"
+            (lambda args
+              (eprintf "SPLIT-DEBUG handler args = ~a
+" args)
+              (set-box! seen args)))
   (emit-test-signal! sp "splitterMoved(int,int)" (list 10 20))
   (sleep 0.5)
   (eprintf "SPLIT-DEBUG: seen after 0.5s = ~a
