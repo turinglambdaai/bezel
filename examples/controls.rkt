@@ -58,7 +58,7 @@
 (splitter-add-widget split right)
 
 ;; Menu with a real keyboard shortcut.
-(define win (make-window #:title "Bezel Controls" #:size '(560 360)))
+(define win (make-window #:title "Bezel Controls" #:size '(560 400)))
 (define file-menu (menu! (menu-bar win) "File"))
 (define stop-action (menu-action! file-menu "Stop clock"))
 (connect! stop-action "triggered()" (lambda _ (stop-timer! ticker)))
@@ -66,5 +66,37 @@
 (set-action-shortcut! quit-action "Ctrl+Q")
 (connect! quit-action "triggered()" (lambda _ (quit!)))
 
-(layout! win (vbox #:margins '(8 8 8 8) tabs split))
+;; Phase 5 chrome: status bar + toolbar + tray + clipboard + tree/date.
+(status-show-message! (window-status-bar win) "Ready — the File menu stops the clock")
+(define refresh (toolbar-add-action! (window-toolbar win "Main") "Refresh"))
+(connect! refresh "triggered()"
+          (lambda _
+            (clipboard-set-text! (format "clock=~a" (lcd-value clock)))
+            (status-show-message! (window-status-bar win) "Clock copied to clipboard")))
+
+(define tree (make-tree-widget))
+(tree-set-header-labels! tree "Asset\nKind")
+(define root-row (tree-add! tree "src\nfolder"))
+(tree-add-child! tree root-row "controls.rkt\nfile")
+(tree-select! tree root-row)
+
+(define until (make-date-edit))
+(dateedit-set-calendar-popup! until #t)
+(dateedit-set-date! until 2026 12 31)
+
+(define tray (make-tray "" "Bezel Controls"))
+(tray-set-menu! tray file-menu)
+(tray-show! tray)
+
+(define count (make-observable 0))
+(define count-label (make-label "0"))
+(observe! count (lambda (v) (widget-set-text! count-label (~a v))))
+(connect! (toolbar-add-action! (window-toolbar win "Main") "+1")
+          "triggered()"
+          (lambda _ (set-observable! count (add1 (observable-value count)))))
+
+(layout! win (vbox #:margins '(8 8 8 8)
+                    tabs split
+                    (hbox count-label (make-label "click +1 on the toolbar"))
+                    (hbox (make-label "Ship by:") until tree)))
 (run win)
