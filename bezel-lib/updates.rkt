@@ -206,7 +206,8 @@ PARENT="$(dirname "$APP_DIR")"
 TMP="$PARENT/.bezel-update-tmp.$$"
 mkdir -p "$TMP"
 if command -v unzip >/dev/null 2>&1; then
-  unzip -q "$ARCHIVE" -d "$TMP"
+  # </dev/null: an interactive unzip prompt would block forever here
+  unzip -qo "$ARCHIVE" -d "$TMP" </dev/null
 else
   python3 - "$ARCHIVE" "$TMP" <<'PY'
 import sys, zipfile
