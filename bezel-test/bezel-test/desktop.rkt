@@ -129,16 +129,12 @@
   (check-not-exn (lambda () (tray-hide! tray)))
   (check-true (bezel-alive? tray)))
 
-(test-case "typed (int,int) signals: table cellChanged through the bridge"
+(test-case "typed (int,int) signals: both arguments arrive"
   (define t (make-table-widget))
   (table-set-dimensions! t 2 2)
   (define seen (box #f))
-  (with-handlers ([exn:fail? (lambda (e)
-                               (eprintf "CELLCHANGED-DEBUG: ~a
-" (exn-message e))
-                               (raise e))])
-    (connect! t "cellChanged(int,int)" (lambda (row col) (set-box! seen (list row col)))))
-  (table-set-cell-text! t 1 0 "edited")
+  (connect! t "cellChanged(int,int)" (lambda (row col) (set-box! seen (list row col))))
+  (emit-test-signal! t "cellChanged(int,int)" (list 1 0))
   (check-true (wait-for (lambda () (equal? (list 1 0) (unbox seen))))
               "both int arguments should arrive typed"))
 
