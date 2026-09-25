@@ -226,23 +226,34 @@ rm -rf "$APP_DIR.old.$$" "$TMP"
 SCRIPT
 )
 
+;; Parameters arrive through the environment, not the command line:
+;; one quote-escape bug in a nested Start-Process argument list hung
+;; the whole update chain on real Windows.
 (define swapper-ps1-template
   #<<SCRIPT
-param($AppDir, $Archive, $ExeRel, $AppPid)
-# Bezel self-update swapper: wait -> extract -> swap -> relaunch.
-Wait-Process -Id $AppPid -ErrorAction SilentlyContinue
+$AppDir = $env:BEZEL_SWAP_APPDIR
+$Archive = $env:BEZEL_SWAP_ARCHIVE
+$ExeRel = $env:BEZEL_SWAP_EXEREL
+$AppPid = $env:BEZEL_SWAP_PID
+$log = Join-Path (Split-Path -Parent $AppDir) ".bezel-swap.log"
+function Log($m) { $m | Out-File -Append -Encoding utf8 $log }
+Log "=== win swap start app=$AppDir"
+if ($AppPid -and $AppPid -ne "0") {
+  Wait-Process -Id $AppPid -ErrorAction SilentlyContinue
+}
 $parent = Split-Path -Parent $AppDir
 $tmp = Join-Path $parent ".bezel-update-tmp"
 if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
 Expand-Archive -Path $Archive -DestinationPath $tmp -Force
 $new = Get-ChildItem -Path $tmp -Directory | Select-Object -First 1
-if (-not $new) { exit 1 }
+if (-not $new) { Log "no new dir in archive"; exit 1 }
 $old = "$AppDir.old"
 if (Test-Path $old) { Remove-Item -Recurse -Force $old }
 Rename-Item $AppDir "$AppDir.old" -ErrorAction Stop
 Move-Item $new.FullName $AppDir
 Remove-Item -Recurse -Force $old, $tmp
-Start-Process -FilePath (Join-Path $AppDir $ExeRel)
+Log "swap done"
+Start-Process -FilePath (Join-Path $AppDir $ExeRel) -WorkingDirectory $parent
 SCRIPT
 )
 
@@ -269,14 +280,18 @@ SCRIPT
     [(windows)
      (define script (make-temporary-file "bezel-swap~a.ps1"))
      (display-to-file swapper-ps1-template script #:exists 'replace)
-     ;; Start-Process detaches the swapper so this process can exit
-     ;; without the runtime waiting on (or tearing down) the child.
-     (define inner
-       (format "-NoProfile -ExecutionPolicy Bypass -File ~s -AppDir ~s -Archive ~s -ExeRel ~s -AppPid ~s"
-               (path->string script) (path->string app-root) archive-path exe-rel pid))
+     ;; Parameters travel through the environment (inherited by
+     ;; Start-Process) — no nested quoting anywhere. Start-Process
+     ;; detaches the swapper so this process can exit immediately.
+     (putenv "BEZEL_SWAP_APPDIR" (path->string app-root))
+     (putenv "BEZEL_SWAP_ARCHIVE" archive-path)
+     (putenv "BEZEL_SWAP_EXEREL" exe-rel)
+     (putenv "BEZEL_SWAP_PID" pid)
      (apply subprocess #f #f #f (find-executable-path "powershell.exe")
-            (list "-NoProfile" "-Command"
-                  (format "Start-Process -WindowStyle Hidden powershell ~s" inner)))
+            (list "-NoProfile" "-WindowStyle" "Hidden" "-ExecutionPolicy" "Bypass"
+                  "-Command"
+                  (format "Start-Process -WindowStyle Hidden powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','~a'"
+                          (string-replace (path->string script) "\\" "/"))))
      (void)]
     [else
      (define script (make-temporary-file "bezel-swap~a.sh"))
