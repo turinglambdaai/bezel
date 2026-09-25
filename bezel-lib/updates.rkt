@@ -36,6 +36,7 @@
          packaged-app-root)
 
 (require json
+         ffi/unsafe
          file/sha1
          racket/format
          net/sendurl
@@ -177,6 +178,13 @@
                        (sha1 (file->bytes out))))
          out)))
 
+;; The C library owns the process id (Racket core exposes no portable
+;; getpid; MSVC spells it _getpid).
+(define getpid-ffi
+  (get-ffi-obj (if (eq? (system-type) 'windows) '_getpid 'getpid)
+               #f (_fun -> _int)
+               (lambda () (lambda () 0))))
+
 (define (app-name-from-root app-root)
   (path->string (last (explode-path (simplify-path app-root)))))
 
@@ -254,7 +262,7 @@ SCRIPT
              "-AppDir" (path->string app-root)
              "-Archive" archive-path
              "-ExeRel" exe-rel
-             "-AppPid" (~a (system-type (quote pid)))))
+             "-AppPid" (~a (getpid-ffi))))
      (subprocess #f #f #f (find-executable-path "powershell.exe") args)
      (void)]
     [else
@@ -265,7 +273,7 @@ SCRIPT
                        (path->string app-root)
                        archive-path
                        exe-rel
-                       (~a (system-type (quote pid)))))
+                       (~a (getpid-ffi))))
      (void)]))
 
 ;; Check -> download -> verify -> apply -> exit. Silent by design: returns
