@@ -268,12 +268,12 @@ SCRIPT
     [else
      (define script (make-temporary-file "bezel-swap~a.sh"))
      (display-to-file swapper-sh-template script #:exists 'replace)
-     (subprocess #f #f #f "/bin/sh"
-                 (list (path->string script)
-                       (path->string app-root)
-                       archive-path
-                       exe-rel
-                       (~a (getpid-ffi))))
+     (apply subprocess #f #f #f "/bin/sh"
+            (list (path->string script)
+                  (path->string app-root)
+                  archive-path
+                  exe-rel
+                  (~a (getpid-ffi))))
      (void)]))
 
 ;; Check -> download -> verify -> apply -> exit. Silent by design: returns
