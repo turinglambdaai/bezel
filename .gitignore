@@ -34,3 +34,9 @@ docs/showcase-*.png
 
 # local packaging test output
 app-dist/
+
+# local packaging/self-update test output
+app-dist2/
+update.zip
+update-feed.json
+marker.txt
