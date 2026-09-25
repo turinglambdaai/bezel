@@ -133,7 +133,11 @@
   (define t (make-table-widget))
   (table-set-dimensions! t 2 2)
   (define seen (box #f))
-  (connect! t "cellChanged(int,int)" (lambda (row col) (set-box! seen (list row col))))
+  (with-handlers ([exn:fail? (lambda (e)
+                               (eprintf "CELLCHANGED-DEBUG: ~a
+" (exn-message e))
+                               (raise e))])
+    (connect! t "cellChanged(int,int)" (lambda (row col) (set-box! seen (list row col)))))
   (table-set-cell-text! t 1 0 "edited")
   (check-true (wait-for (lambda () (equal? (list 1 0) (unbox seen))))
               "both int arguments should arrive typed"))
