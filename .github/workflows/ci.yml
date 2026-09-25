@@ -402,7 +402,7 @@ jobs:
             sleep 1
           done
           echo "marker: $(cat marker.txt 2>/dev/null || echo MISSING)"
-          cat .bezel-swap.log 2>/dev/null || true
+          cat app-dist/.bezel-swap.log 2>/dev/null || true
           [[ $ok == 1 && "$(cat marker.txt)" == "2.0.0" ]]
 
   docs:

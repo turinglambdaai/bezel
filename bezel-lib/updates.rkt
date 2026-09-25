@@ -266,9 +266,7 @@ SCRIPT
   (define app-root (packaged-app-root))
   (define exe-rel
     (case (system-type)
-      [(windows)
-       (path->string (build-path (app-name-from-root app-root)
-                                 (~a (app-name-from-root app-root) ".exe")))]
+      [(windows) (~a (app-name-from-root app-root) ".exe")]  ; exe sits at the app root
       [(macosx)
        (path->string (build-path (~a (app-name-from-root app-root) ".app")
                                  "Contents" "MacOS" "bin"
