@@ -392,7 +392,9 @@ jobs:
           else
             FEED="$PWD/update-feed.json"
           fi
-          BEZEL_SMOKE_FEED="file:///$FEED" "$EXE" || true
+          BEZEL_SMOKE_FEED="file:///$FEED" "$EXE" > v1.log 2>&1 || true
+          echo "--- v1.log ---"
+          cat v1.log
           ok=0
           for i in $(seq 1 60); do
             if [[ -f marker.txt ]]; then ok=1; break; fi
