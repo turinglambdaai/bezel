@@ -293,6 +293,9 @@
               (path->string (find-relative-path app-dir exe-path)))
       (build-path appdir "AppRun")
       #:exists 'replace)
+     ;; display-to-file drops the execute bit AppRun needs.
+     (run-tool! "chmod" (find-executable-path "chmod")
+                (list "+x" (path->string (build-path appdir "AppRun"))))
      (display-to-file
       (string-append
        (format "[Desktop Entry]\nType=Application\nName=~a\n" name)
