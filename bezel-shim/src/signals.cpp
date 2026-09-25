@@ -259,13 +259,28 @@ void SignalSink::dispatchS(const QString& a) {
 
 void SignalSink::deliver_variants(int argc, const bezel_variant* argv) {
     if (argc <= 0) { dispatch0(); return; }
-    switch (argv[0].tag) {
-        case BEZEL_VT_INT: dispatchI(static_cast<int>(argv[0].i)); break;
-        case BEZEL_VT_BOOL: dispatchB(argv[0].i != 0); break;
-        case BEZEL_VT_DOUBLE: dispatchD(argv[0].d); break;
-        case BEZEL_VT_STRING: dispatchS(QString::fromUtf8(argv[0].s ? argv[0].s : "")); break;
-        default: dispatch0(); break;
+    if (argc == 1) {
+        switch (argv[0].tag) {
+            case BEZEL_VT_INT: dispatchI(static_cast<int>(argv[0].i)); break;
+            case BEZEL_VT_BOOL: dispatchB(argv[0].i != 0); break;
+            case BEZEL_VT_DOUBLE: dispatchD(argv[0].d); break;
+            case BEZEL_VT_STRING: dispatchS(QString::fromUtf8(argv[0].s ? argv[0].s : "")); break;
+            default: dispatch0(); break;
+        }
+        return;
     }
+    // Multi-argument delivery (the emit test hook; multi-arg Qt signals
+    // route through their typed slots instead). The queue owns string
+    // buffers, so re-duplicate every string; scalars copy as-is.
+    bezel_variant copy[BEZEL_MAX_SIGNAL_ARGS] = {};
+    const int n = (argc > BEZEL_MAX_SIGNAL_ARGS) ? BEZEL_MAX_SIGNAL_ARGS : argc;
+    for (int i = 0; i < n; ++i) {
+        copy[i] = argv[i];
+        if (copy[i].tag == BEZEL_VT_STRING) {
+            copy[i].s = strdup_q(QString::fromUtf8(copy[i].s ? copy[i].s : ""));
+        }
+    }
+    queue_signal(id_, n, copy);
 }
 
 namespace {
