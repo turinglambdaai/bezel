@@ -174,7 +174,7 @@
     (and (file-exists? out)
          (or (not expected-sha1)
              (string=? (string-downcase expected-sha1)
-                       (bytes->hex-string (sha1 (file->bytes out)))))
+                       (sha1 (file->bytes out))))
          out)))
 
 (define (app-name-from-root app-root)

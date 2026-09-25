@@ -1,0 +1,4 @@
+To run: keep native/ beside bezel-demo.exe (and lib/ where present).
+
+To sign: see scripts/sign-app-windows.ps1 / scripts/sign-app-macos.sh
+          in the Bezel repository, and docs/APP_PACKAGING.md.

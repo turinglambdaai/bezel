@@ -26,5 +26,5 @@
  (hasheq 'version (version)
          'url (url->string (path->url (archive)))
          'notes "CI self-update test"
-         'sha1 (bytes->hex-string (sha1 (file->bytes (archive))))))
+         'sha1 (sha1 (file->bytes (archive)))))
 (newline)
