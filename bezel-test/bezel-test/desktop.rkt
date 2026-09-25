@@ -130,12 +130,14 @@
   (check-true (bezel-alive? tray)))
 
 (test-case "typed (int,int) signals: both arguments arrive"
-  (define t (make-table-widget))
-  (table-set-dimensions! t 2 2)
+  ;; splitterMoved(int,int): same (int,int) shape as cellChanged
+  (define sp (splitter-new))
+  (splitter-add-widget sp (make-label "a"))
+  (splitter-add-widget sp (make-label "b"))
   (define seen (box #f))
-  (connect! t "cellChanged(int,int)" (lambda (row col) (set-box! seen (list row col))))
-  (emit-test-signal! t "cellChanged(int,int)" (list 1 0))
-  (check-true (wait-for (lambda () (equal? (list 1 0) (unbox seen))))
+  (connect! sp "splitterMoved(int,int)" (lambda (pos index) (set-box! seen (list pos index))))
+  (emit-test-signal! sp "splitterMoved(int,int)" (list 10 20))
+  (check-true (wait-for (lambda () (equal? (list 10 20) (unbox seen))))
               "both int arguments should arrive typed"))
 
 (displayln "bezel-test/desktop: all tests passed")
