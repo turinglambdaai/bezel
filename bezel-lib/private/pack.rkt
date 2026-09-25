@@ -245,7 +245,7 @@
     (format "OutputBaseFilename=~a-~a-setup\n" name version)
     "Compression=lzma2\nSolidCompression=yes\nArchitecturesInstallIn64BitMode=x64compatible\n"
     "[Files]\n"
-    (format "Source: \"~a\\*\"; DestDir: \"{app}\"; Flags: recursesubdirs; Excludes: \"installer.iss\"\n" name)
+    "Source: \"*\"; DestDir: \"{app}\"; Flags: recursesubdirs; Excludes: \"installer.iss\"\n"
     "[Icons]\n"
     (format "Name: \"{group}\\~a\"; Filename: \"{app}\\~a\"\n" name exe-name)
     (format "Name: \"{autodesktop}\\~a\"; Filename: \"{app}\\~a\"\n" name exe-name))
