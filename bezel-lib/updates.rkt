@@ -158,9 +158,9 @@
   (define dir (path-only exe))
   (define root
     (case (system-type)
-      [(windows) dir]
-      [(macosx) (build-path dir 'up 'up 'up 'up)]
-      [else (build-path dir 'up)]))
+      [(windows) (simplify-path dir #f)]
+      [(macosx) (simplify-path (build-path dir 'up 'up 'up 'up) #f)]
+      [else (simplify-path (build-path dir 'up) #f)]))
   ;; path-only/simplify-path keep a trailing slash; `mv` fails when the
   ;; destination carries one and does not exist, so strip separators.
   (string->path
@@ -285,7 +285,7 @@ SCRIPT
      (define cmd
        (format "nohup /bin/sh '~a' '~a' '~a' '~a' '~a' >/dev/null 2>&1 &"
                (path->string script) (path->string app-root) archive-path exe-rel pid))
-     (subprocess #f #f #f "/bin/sh" (list "-c" cmd))
+     (apply subprocess #f #f #f "/bin/sh" (list "-c" cmd))
      (void)]))
 
 ;; Check -> download -> verify -> apply -> exit. Silent by design: returns
