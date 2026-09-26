@@ -107,8 +107,8 @@ a newer one) and then on every change; equal values skip delivery.
 @racketblock[
 (define count (make-observable 0))
 (observe! count (lambda (v) (widget-set-text! label (~a v))))
-(set-observable! count 41)   ; label shows 41
-(set-observable! count 41)   ; unchanged: watchers skipped]
+(set-observable! count 41)
+(set-observable! count 41)]
 
 @section{Desktop integration}
 
@@ -140,7 +140,7 @@ out of scope.
 @section{Updates}
 
 The feed is one static JSON file with @tt{version} and @tt{url} fields,
-plus optional @tt{notes} and @tt{sha1}. Checks are best-effort and quiet:
+plus optional @tt{notes} and @tt{sha1} — checks are best-effort and quiet:
 
 @racketblock[
 (check-and-prompt-update! #:feed feed-url #:current "1.2.3" #:parent win)]
@@ -158,10 +158,10 @@ success:
 
 @commandline{raco bezel package --entry my-app.rkt --name MyApp --dest dist}
 
-produces a self-contained application folder (embedded executable plus
-bundled native runtime; a real @tt{.app} bundle on macOS). Add
-@tt{--installer} for the platform installer (Inno Setup / dmg with
-drag-to-install / AppImage) and @tt{--app-version} to stamp the
+produces a self-contained application folder: embedded executable plus
+bundled native runtime, a real @tt{.app} bundle on macOS. Add
+@tt{--installer} for the platform installer -- Inno Setup, dmg with
+drag-to-install, or AppImage -- and @tt{--app-version} to stamp the
 VERSION file @racket[auto-update!] reads back. Signing helpers for
 Windows and macOS and the full walkthrough live in
-@tt{docs/APP_PACKAGING.md}.
+in @tt{docs/APP_PACKAGING.md} — the complete walkthrough.
