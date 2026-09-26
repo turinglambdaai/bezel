@@ -56,6 +56,29 @@ Two paths:
 4. Run the test suite (all-green on your platform)
 5. Submit a PR with a clear description
 
+## Version bumps and releases
+
+The version lives in **five places**, and `scripts/check-version.rkt`
+fails CI on any disagreement:
+
+- `bezel-lib/info.rkt`, `bezel/info.rkt`, `bezel-lib/version.rkt`
+- `bezel-shim/CMakeLists.txt` (`project(bezel-shim VERSION ...)`)
+- `CHANGELOG.md` (topmost `## x.y.z` heading)
+
+To release: bump all five, update the README release badge, merge, then
+push a `vX.Y.Z` tag — the Release workflow builds, clean-smoke-tests,
+checksums, and publishes the runtime packages. The complete checklist is
+[docs/COMMERCIAL_RELEASE.md](docs/COMMERCIAL_RELEASE.md).
+
+## Testing beyond the unit suite
+
+Several suites run **without the Qt shim** on any machine
+(`bezel-test/bezel-test/{timers,observable,sentry}.rkt`). The
+packaging and silent self-update flows are exercised end to end by CI
+against real built applications; `scripts/app-smoke.rkt` is the entry
+point those jobs drive, and `scripts/make-feed.rkt` builds a local
+update feed for reproducing the self-update loop manually.
+
 ## Package Structure
 
 | Package | Purpose |
