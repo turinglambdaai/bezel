@@ -1,0 +1,17 @@
+{
+  "class": "QTextEdit",
+  "module": "richtext",
+  "header": "QTextEdit",
+  "constructors": [
+    { "c-name": "richtext-new", "args": ["string", "parent"] }
+  ],
+  "methods": [
+    { "c-name": "richtext-set-html",       "qt": "setHtml",      "args": ["string"] },
+    { "c-name": "richtext-html",           "qt": "toHtml",       "ret": "string" },
+    { "c-name": "richtext-set-plain-text", "qt": "setPlainText", "args": ["string"] },
+    { "c-name": "richtext-to-plain-text",  "qt": "toPlainText",  "ret": "string" },
+    { "c-name": "richtext-append",         "qt": "append",       "args": ["string"] },
+    { "c-name": "richtext-clear",          "qt": "clear" }
+  ],
+  "signals": ["textChanged()"]
+}

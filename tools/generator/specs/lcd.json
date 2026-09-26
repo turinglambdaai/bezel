@@ -1,0 +1,14 @@
+{
+  "class": "QLCDNumber",
+  "module": "lcd",
+  "header": "QLCDNumber",
+  "constructors": [
+    { "c-name": "lcd-new", "args": ["parent"] }
+  ],
+  "methods": [
+    { "c-name": "lcd-display",         "qt": "display",       "args": ["int"] },
+    { "c-name": "lcd-value",           "qt": "value",         "ret": "double" },
+    { "c-name": "lcd-set-digit-count", "qt": "setDigitCount", "args": ["int"] }
+  ],
+  "signals": ["valueChanged(double)"]
+}

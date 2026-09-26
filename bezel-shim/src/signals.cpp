@@ -233,6 +233,15 @@ void SignalSink::dispatchI(int a) {
     deliver(1, &v);
 }
 
+void SignalSink::dispatchII(int a, int b) {
+    bezel_variant vs[2] = {};
+    vs[0].tag = BEZEL_VT_INT;
+    vs[0].i = a;
+    vs[1].tag = BEZEL_VT_INT;
+    vs[1].i = b;
+    deliver(2, vs);
+}
+
 void SignalSink::dispatchD(double a) {
     bezel_variant v{};
     v.tag = BEZEL_VT_DOUBLE;
@@ -250,24 +259,43 @@ void SignalSink::dispatchS(const QString& a) {
 
 void SignalSink::deliver_variants(int argc, const bezel_variant* argv) {
     if (argc <= 0) { dispatch0(); return; }
-    switch (argv[0].tag) {
-        case BEZEL_VT_INT: dispatchI(static_cast<int>(argv[0].i)); break;
-        case BEZEL_VT_BOOL: dispatchB(argv[0].i != 0); break;
-        case BEZEL_VT_DOUBLE: dispatchD(argv[0].d); break;
-        case BEZEL_VT_STRING: dispatchS(QString::fromUtf8(argv[0].s ? argv[0].s : "")); break;
-        default: dispatch0(); break;
+    if (argc == 1) {
+        switch (argv[0].tag) {
+            case BEZEL_VT_INT: dispatchI(static_cast<int>(argv[0].i)); break;
+            case BEZEL_VT_BOOL: dispatchB(argv[0].i != 0); break;
+            case BEZEL_VT_DOUBLE: dispatchD(argv[0].d); break;
+            case BEZEL_VT_STRING: dispatchS(QString::fromUtf8(argv[0].s ? argv[0].s : "")); break;
+            default: dispatch0(); break;
+        }
+        return;
     }
+    // Multi-argument delivery (the emit test hook; multi-arg Qt signals
+    // route through their typed slots instead). The queue owns string
+    // buffers, so re-duplicate every string; scalars copy as-is.
+    bezel_variant copy[BEZEL_MAX_SIGNAL_ARGS] = {};
+    const int n = (argc > BEZEL_MAX_SIGNAL_ARGS) ? BEZEL_MAX_SIGNAL_ARGS : argc;
+    for (int i = 0; i < n; ++i) {
+        copy[i] = argv[i];
+        if (copy[i].tag == BEZEL_VT_STRING) {
+            copy[i].s = strdup_q(QString::fromUtf8(copy[i].s ? copy[i].s : ""));
+        }
+    }
+    queue_signal(id_, n, copy);
 }
 
 namespace {
 // Pick the sink slot matching the signal's first parameter type.
 QByteArray slot_for_signal(const QMetaMethod& sig) {
     if (sig.parameterCount() == 0) return "dispatch0()";
-    const QByteArray t = sig.parameterMetaType(0).name();
-    if (t == "bool") return "dispatchB(bool)";
-    if (t == "int") return "dispatchI(int)";
-    if (t == "double" || t == "qreal") return "dispatchD(double)";
-    if (t == "QString") return "dispatchS(QString)";
+    const QByteArray t0 = sig.parameterMetaType(0).name();
+    if (sig.parameterCount() >= 2 && t0 == "int"
+        && sig.parameterMetaType(1).name() == "int") {
+        return "dispatchII(int,int)";
+    }
+    if (t0 == "bool") return "dispatchB(bool)";
+    if (t0 == "int") return "dispatchI(int)";
+    if (t0 == "double" || t0 == "qreal") return "dispatchD(double)";
+    if (t0 == "QString") return "dispatchS(QString)";
     return "dispatch0()";  // parameter types not converted yet: deliver argless
 }
 }  // namespace

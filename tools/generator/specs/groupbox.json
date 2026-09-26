@@ -1,0 +1,15 @@
+{
+  "class": "QGroupBox",
+  "module": "groupbox",
+  "header": "QGroupBox",
+  "constructors": [
+    { "c-name": "groupbox-new", "args": ["string", "parent"] }
+  ],
+  "methods": [
+    { "c-name": "groupbox-set-title",     "qt": "setTitle",      "args": ["string"] },
+    { "c-name": "groupbox-title",         "qt": "title",         "ret": "string" },
+    { "c-name": "groupbox-set-checkable", "qt": "setCheckable",  "args": ["bool"] },
+    { "c-name": "groupbox-is-checkable",  "qt": "isCheckable",   "ret": "bool" }
+  ],
+  "signals": ["toggled(bool)"]
+}

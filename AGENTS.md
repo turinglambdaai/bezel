@@ -77,32 +77,43 @@ QT_QPA_PLATFORM=offscreen racket scripts/showcase.rkt docs/showcase.png
 bezel/                # 元包：`raco pkg install bezel` 装齐下列全部
 bezel-lib/            # 核心库（collection `bezel`）
 ├── app.rkt           # make-application / run（泵循环）/ quit!
-├── widgets.rkt       # 构造器 + 共享控件 API + widget-grab-png
+├── widgets.rkt       # 构造器 + 共享控件 API + grab_png + 表格/树/日期/tooltip/几何
 ├── layouts.rkt       # 树形（vbox/hbox/grid/form/stretch）+ 命令式
-├── menus.rkt         # menu-bar / menu! / menu-action!
-├── dialogs.rkt       # msg-information / warning / question
+├── menus.rkt         # menu-bar / menu! / set-action-shortcut! / 状态栏/工具栏
+├── dialogs.rkt       # msg-information / warning / question + 文件对话框
 ├── signals.rkt       # connect! / disconnect! / emit-test-signal!
+├── timers.rkt        # after! / every! / stop-timer! / stop-all-timers!（cleanup 时清场）
+├── version.rkt       # bezel-version 唯一版本源（check-version 校验）
+├── desktop.rkt       # 剪贴板 + 系统托盘/通知
+├── sentry.rkt        # Sentry 兼容错误上报（纯 Racket，无 Qt 依赖，本地可测）
+├── observable.rkt    # 数据绑定（observe! 初始同步推送，watcher 独立线程）
+├── updates.rkt       # check/提示/静默自更新（auto-update! 外置 swapper：等退出→换目录→重启）
+├── cli.rkt           # raco bezel doctor | package
 ├── main.rkt          # umbrella
 └── private/
-    ├── lib.rkt       # libbezel 查找（$BEZEL_LIBRARY → build 目录 → 系统）
+    ├── lib.rkt       # libbezel 查找（$BEZEL_LIBRARY → native 目录们 → build 目录 → 系统）
     ├── raw.rkt       # define-bezel：kebab→snake + 全量编组（经 gui）
     ├── marshal.rkt   # gui / drain-gui!：协作式编组队列
     ├── dispatch.rkt  # dispatcher 线程：bezel-next-signal 轮询 + handler 分发
     ├── objects.rkt   # bezel-object 句柄 + 所有权 + finalizer
+    ├── pack.rkt      # raco bezel package 的打包引擎（raco exe --embed + runtime 拷贝）
     ├── errors.rkt    # exn:fail:bezel + ok!/ok-handle/ok-string
     ├── ctypes.rkt    # variant / signal-msg 结构体（镜像 bezel.h）
-    └── generated/    # 生成器产物（dial_gen.rkt 等）
+    └── generated/    # 生成器产物（dial_gen.rkt 等 9 个模块）
 bezel-shim/           # C++ shim（CMake；AUTOMOC 开）
 ├── include/bezel/bezel.h   # C ABI 契约（文档齐全）
 └── src/
     ├── core.cpp      # app 生命周期 / on_gui / 句柄注册表 / 信号队列
-    ├── widgets.cpp   # 控件构造器 + 值 API + grab_png
-    ├── layouts.cpp   # 布局 / 菜单 / 对话框
+    ├── widgets.cpp   # 控件构造器 + 值 API + grab_png + 表格/树/日期/tooltip/几何
+    ├── dialogs.cpp   # 文件对话框（与 msg-* 同为阻塞式模态约定）
+    ├── tray.cpp       # 剪贴板 + 系统托盘（QClipboard/QSystemTrayIcon）
+    ├── layouts.cpp   # 布局 / 菜单 / msg 对话框
     ├── signals.cpp   # 信号桥：sink 连接 + 队列 + emit 测试钩子
     ├── signalsink.h  # 每连接 sink（Q_OBJECT，AUTOMOC）
-    └── generated/    # 生成器产物（dial_gen.cpp 等）
-tools/generator/      # JSON spec → shim + Racket 双侧代码
+    └── generated/    # 生成器产物（dial_gen.cpp 等 9 个文件）
+tools/generator/      # JSON spec → shim + Racket 双侧代码（specs/ 下 9 个 spec）
 docs/architecture.md  # 深入设计（先读这个再改 private/ 或 shim/）
+docs/APP_PACKAGING.md # 最终应用打包 + 签名流程
 ```
 
 ## 常见任务指引
@@ -113,6 +124,8 @@ docs/architecture.md  # 深入设计（先读这个再改 private/ 或 shim/）
 - **加一类控件（规模化路径）**：写 `tools/generator/specs/*.json`，跑
   `racket tools/generator/generate.rkt <spec>`，CMake 已 glob
   `src/generated/*.cpp`，`main.rkt` require 生成模块。参考 `specs/dial.json`。
+  参数类型支持 parent/widget/string/int/double/bool；`orientation` 是
+  C 侧 int、Qt 侧 `static_cast<Qt::Orientation>`（1/2 = 水平/垂直）。
 - **加类型化信号**：`signalsink.h` 加 slot（按首参类型），`slot_for_signal`
   加映射；或用生成器的 `signals` 字段登记文档。
 - **改泵行为**：`app.rkt` 的 `run`（`#:fps` 控制帧率）；泵必须同时做

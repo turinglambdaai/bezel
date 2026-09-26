@@ -4,11 +4,12 @@
          bezel-library-names
          bezel-native-search-roots
          bezel-native-library-candidates
-         qt-plugin-root-for)
+         root-library-candidates
+         qt-plugin-root-for
+         bezel-lib-root)
 
 (require racket/list
-         racket/path
-         racket/runtime-path)
+         racket/path)
 
 ;; Keep the key deliberately boring and stable: release assets, package-local
 ;; bundles, diagnostics, and CI all use the same <os>-<arch> spelling.
@@ -21,7 +22,16 @@
     [(macosx) '("libbezel.0.dylib" "libbezel.dylib")]
     [else '("libbezel.so.0" "libbezel.so")]))
 
-(define-runtime-path bezel-lib-root "..")
+;; Root of the installed `bezel` collection (the bezel-lib package
+;; directory). Deliberately NOT define-runtime-path: relative runtime-path
+;; specs (".." / ".") are serialized into `raco exe` binaries as 'up/'same,
+;; and `raco distribute` crashes on them (split-path contract violation).
+;; In a standalone executable the collection may not resolve at all, so
+;; the lookup is guarded and callers treat #f as "no package-local
+;; runtime here".
+(define bezel-lib-root
+  (with-handlers ([exn:fail? (lambda (e) #f)])
+    (collection-path "bezel")))
 
 (define (directory-env name)
   (define value (getenv name))
@@ -29,10 +39,22 @@
        (not (string=? value ""))
        (simple-form-path value)))
 
+;; Directory of the running executable. For a `raco exe` distribution
+;; this is the shipped application folder, so <exe-dir>/native/<os>-<arch>
+;; is how packaged applications find their bundled runtime. During
+;; ordinary development it is the Racket installation directory, where
+;; no native/ bundle exists — a harmless extra candidate.
+(define (executable-directory)
+  (define exe (find-executable-path (find-system-path 'exec-file)))
+  (and exe (path-only exe)))
+
 (define bezel-native-search-roots
   (filter values
           (list (directory-env "BEZEL_NATIVE_DIR")
-                (build-path bezel-lib-root "native" bezel-platform-key))))
+                (and bezel-lib-root
+                     (build-path bezel-lib-root "native" bezel-platform-key))
+                (and (executable-directory)
+                     (build-path (executable-directory) "native" bezel-platform-key)))))
 
 (define (root-library-candidates root)
   (append

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(bezel-shim
-        VERSION 0.2.0
+        VERSION 0.3.0
         DESCRIPTION "Bezel — Qt 6 shim exposing a stable C ABI for Racket FFI"
         LANGUAGES CXX)
 
@@ -19,10 +19,12 @@ file(GLOB BEZEL_GENERATED ${CMAKE_CURRENT_SOURCE_DIR}/src/generated/*.cpp)
 
 set(BEZEL_SOURCES
     src/core.cpp
-    src/widgets.cpp
+    src/dialogs.cpp
     src/layouts.cpp
     src/signals.cpp
     src/signalsink.h
+    src/tray.cpp
+    src/widgets.cpp
     ${BEZEL_GENERATED}
 )
 

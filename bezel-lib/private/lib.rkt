@@ -7,8 +7,11 @@
 ;;   1. $BEZEL_LIBRARY       — absolute path to the shared library file
 ;;   2. $BEZEL_NATIVE_DIR    — extracted Bezel runtime bundle directory
 ;;   3. package native dir   — bezel-lib/native/<os>-<arch>/
-;;   4. local build tree     — bezel-shim/build/ (development checkouts)
-;;   5. system search paths  — ffi-lib default (LD_LIBRARY_PATH, brew, vcpkg...)
+;;   4. exe-dir native dir   — <executable-dir>/native/<os>-<arch>/
+;;                             (raco exe distributions built by
+;;                              `raco bezel package`)
+;;   5. local build tree     — bezel-shim/build/ (development checkouts)
+;;   6. system search paths  — ffi-lib default (LD_LIBRARY_PATH, brew, vcpkg...)
 ;;
 ;; Set BEZEL_REQUIRE_PACKAGED_RUNTIME=1 to disable steps 4-5. Release smoke
 ;; tests use this mode so a green job cannot accidentally borrow libbezel/Qt
@@ -25,19 +28,21 @@
 
 (require ffi/unsafe
          racket/path
-         racket/runtime-path
          racket/string
          "platform.rkt")
 
-(define-runtime-path here ".")
-
-;; From bezel-lib/private/ up to the repo root (development checkouts).
-(define repo-root (simplify-path (build-path here ".." "..")))
+;; From the bezel-lib package root up to the repo root (development
+;; checkouts). Computed from platform.rkt's collection root instead of a
+;; relative define-runtime-path: relative runtime-path specs break
+;; `raco distribute` on any application embedding bezel-lib.
+(define repo-root
+  (and bezel-lib-root (build-path bezel-lib-root 'up)))
 
 (define shim-candidates
-  (for*/list ([dir (in-list (list (build-path repo-root "bezel-shim" "build")
-                                  (build-path repo-root "bezel-shim" "build" "Release")))]
-              [name (in-list bezel-library-names)])
+  (for*/list ([dir (in-list (list (and repo-root (build-path repo-root "bezel-shim" "build"))
+                                  (and repo-root (build-path repo-root "bezel-shim" "build" "Release"))))]
+              [name (in-list bezel-library-names)]
+              #:when dir)
     (build-path dir name)))
 
 (define (truthy-env? name)

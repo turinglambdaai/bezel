@@ -1,0 +1,14 @@
+{
+  "class": "QSplitter",
+  "module": "splitter",
+  "header": "QSplitter",
+  "constructors": [
+    { "c-name": "splitter-new", "args": ["parent"] }
+  ],
+  "methods": [
+    { "c-name": "splitter-add-widget",         "qt": "addWidget",          "args": ["widget"] },
+    { "c-name": "splitter-set-orientation",    "qt": "setOrientation",     "args": ["orientation"] },
+    { "c-name": "splitter-set-handle-width",   "qt": "setHandleWidth",     "args": ["int"] }
+  ],
+  "signals": ["splitterMoved(int,int)"]
+}

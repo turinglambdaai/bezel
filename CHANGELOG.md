@@ -3,6 +3,90 @@
 All notable changes to Bezel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.3.0
+
+Phase 5 release: broader Qt class coverage, higher-level ergonomics, and
+final-application packaging/signing helpers.
+
+### Added
+
+- **Generator-produced widget classes** (specs in `tools/generator/specs/`):
+  `QRadioButton` (`radio-*`), `QGroupBox` (`groupbox-*`), `QDoubleSpinBox`
+  (`doublespin-*`), `QLCDNumber` (`lcd-*`), `QTabWidget` (`tabs-*`),
+  `QStackedWidget` (`stacked-*`), `QSplitter` (`splitter-*`), and rich-text
+  `QTextEdit` (`richtext-*`).
+- **QTableWidget** (`make-table-widget`, `table-set-dimensions!`,
+  `table-set-header-labels!`, `table-set-cell-text!`, `table-cell-text`,
+  row/column counts) with out-of-range cell errors.
+- **Timers**: `after!`, `every!`, `stop-timer!` — Racket-thread scheduling
+  that marshals widget calls to the GUI thread without owning the pump.
+- **Native file dialogs**: `get-open-file-name` / `get-save-file-name`
+  (modal, same contract as the `msg-*` family; `#f` on cancel).
+- **Tree widget** (`make-tree-widget`, row-addressed items, children,
+  selection, expansion) and **date editor** (`make-date-edit`,
+  `(dateedit-date e) => '(y m d)`, calendar popup, display format).
+- **Window chrome**: `window-status-bar` + `status-show-message!` /
+  `status-current-message`, `window-toolbar` + `toolbar-add-action!`.
+- **Desktop integration**: `clipboard-set-text!` / `clipboard-text`,
+  system tray with notifications and context menus (`make-tray`,
+  `tray-notify!`, `tray-set-menu!`).
+- **Sentry-compatible error reporting**: `install-sentry-reporter!`
+  hooks uncaught Racket exceptions into background, best-effort POSTs
+  (DSN parsing, event construction, quiet failure semantics); tested
+  against a local throwaway HTTP server.
+- **macOS .app bundles**: `raco bezel package` wraps macOS output in a
+  real bundle with Info.plist (`--bundle-id`); the signing helper signs
+  bundles inside-out.
+- **Silent self-update**: `auto-update!` downloads the new app archive
+  (optional SHA-1 verification), then an out-of-process swapper waits for
+  exit, replaces the app folder, and relaunches — CI drives the full
+  v1→v2 swap on all three release targets.
+- **Platform installers**: `raco bezel package --installer` produces an
+  Inno Setup installer (Windows, silently installable), a dmg (macOS),
+  and an AppImage (Linux) around the same app folder; `--app-version`
+  stamps the VERSION file updates read back.
+- **Observables**: `make-observable` / `observe!` / `set-observable!` /
+  `unobserve!` — synchronous initial push, own-thread watchers whose
+  widget calls marshal to the GUI thread.
+- **Typed `(int,int)` signals** (cellChanged, splitterMoved, ...) through
+  a new `dispatchII` sink slot.
+- **Timer lifecycle**: `bezel-cleanup!` now sweeps every pending timer
+  (`stop-all-timers!`); a late tick no longer raises "no application"
+  after teardown.
+- **Version single source**: `bezel/version.rkt` (`bezel-version`),
+  validated by check-version and surfaced in `raco bezel doctor`.
+- **Widget API gaps**: `widget-focus!`, `widget-visible?`,
+  `widget-window-title` (readback).
+- **macOS dmg drag-to-install**: the installer dmg stages the app beside
+  an /Applications symlink.
+- **Best-effort update checks**: `check-for-update` /
+  `check-and-prompt-update!` against a static JSON version feed
+  (`version`/`url`/`notes`), with padded dotted-version comparison,
+  bounded timeouts, and quiet-`#f` failure semantics; the prompt variant
+  opens the release page in the system browser.
+- **Widget extras**: tooltips (`set-tooltip!` / `widget-tooltip`),
+  geometry readers (`widget-width` / `widget-height` / `widget-x` /
+  `widget-y`), `center-widget!`, and menu-action keyboard shortcuts
+  (`set-action-shortcut!`, e.g. `"Ctrl+Q"`).
+- **Keyword parents**: every handwritten `make-*` constructor accepts
+  `#:parent` (passing both positional and keyword parents is an error).
+- **Generator `orientation` argument type** for enum-setters such as
+  `QSplitter::setOrientation` (C-facing int, Qt-facing cast).
+- **`raco bezel package`**: builds a self-contained application folder —
+  embedded executable plus `native/<os>-<arch>/` runtime — from an entry
+  module.
+- **Exe-relative runtime resolution**: the loader now also searches
+  `<executable-dir>/native/<os>-<arch>/`, which is how `raco bezel
+  package` output finds its runtime on end-user machines.
+- **Signing helpers**: `scripts/sign-app-windows.ps1` (signtool sign +
+  timestamp + verify) and `scripts/sign-app-macos.sh` (codesign hardened
+  runtime, optional notarytool submit + staple).
+- **Packaging guide**: `docs/APP_PACKAGING.md` end-to-end from source to
+  signed distribution.
+- **CI**: clean-runner jobs now also package the demo application with
+  `raco bezel package` and execute the packaged binary headlessly on all
+  release targets.
+
 ## 0.2.0 — 2026-09-21
 
 Commercial-hardening release focused on correctness, reproducibility, and portable native distribution.

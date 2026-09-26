@@ -1,0 +1,15 @@
+{
+  "class": "QStackedWidget",
+  "module": "stacked",
+  "header": "QStackedWidget",
+  "constructors": [
+    { "c-name": "stacked-new", "args": ["parent"] }
+  ],
+  "methods": [
+    { "c-name": "stacked-add",              "qt": "addWidget",        "args": ["widget"], "ret": "int" },
+    { "c-name": "stacked-count",            "qt": "count",            "ret": "int" },
+    { "c-name": "stacked-current-index",    "qt": "currentIndex",     "ret": "int" },
+    { "c-name": "stacked-set-current-index","qt": "setCurrentIndex",  "args": ["int"] }
+  ],
+  "signals": ["currentChanged(int)"]
+}

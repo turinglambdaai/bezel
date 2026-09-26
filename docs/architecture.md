@@ -179,3 +179,46 @@ three CI operating systems. `emit-test-signal!` drives the production
 signal path deterministically; `widget-grab-png` doubles as the
 agent-friendly verification API and generates this README's showcase
 image.
+
+Suites that need no shim at all (`bezel/sentry`, `bezel/observable`,
+`bezel/timers`, `bezel/updates`' pure helpers) run on any host — the
+same headless-first principle pushed one layer further: as much logic
+as possible lives in plain Racket where it can be tested without Qt.
+
+## The application layer (since 0.3.0)
+
+Everything a shipping application needs beyond widgets deliberately
+lives in **pure Racket**, not the shim. The rule: if it doesn't have to
+touch a QObject, it must not require libbezel.
+
+- **Timers** (`timers.rkt`): worker threads + a cancellable flag; a
+  registry lets `bezel-cleanup!` sweep pending timers so a late tick
+  never surfaces "no application" after teardown.
+- **Observables** (`observable.rkt`): watchers fire on their own thread
+  (widget calls inside marshal to the GUI thread, exactly like timer
+  handlers). The initial push from `observe!` is *synchronous* — an
+  async push races the next `set-observable!` and can deliver the old
+  value last, flipping the UI backwards.
+- **Sentry reporting** (`sentry.rkt`): hooks `error-display-handler`,
+  posts on a background thread, fails quiet. Native crashes inside
+  Qt/libbezel bypass the Racket runtime and are out of scope by design.
+- **Updates** (`updates.rkt`): feed check, best-effort download with
+  optional SHA-1, then `auto-update!` hands off to an **out-of-process
+  swapper**. Replacing a running binary in place is platform-hostile
+  (Windows locks the running exe; macOS keeps the bundle mapped), so a
+  tiny script waits for exit, swaps the directory, and relaunches.
+  Two hard-won details: the swapper must be spawned fire-and-forget
+  (`sh -c '... &'` / `Start-Process`) or the Racket runtime waits on
+  the child before it can exit; and its parameters travel through the
+  environment, because one quote-escaping bug in a nested
+  `Start-Process` argument list hangs the whole chain.
+- **Packaging** (`private/pack.rkt`): wraps `raco exe` +
+  `raco distribute` with the layouts each platform expects (embedded
+  DLLs on Windows, `.app` on macOS, `bin/+lib/` on Linux) and always
+  places the native runtime beside the *actual* executable — the
+  loader's exe-relative search step makes the folder self-contained
+  with zero configuration.
+
+The same rule explains the loader order in `private/lib.rkt`: env
+overrides → package-local runtime → `<exe-dir>/native/<os>-<arch>/`
+(the packaging output) → source-checkout build tree → system lookup.

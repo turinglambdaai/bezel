@@ -89,6 +89,7 @@
 (define-bezel bezel-slider-new (_fun _int _bezel-handle -> _bezel-handle))
 (define-bezel bezel-progress-new (_fun _bezel-handle -> _bezel-handle))
 (define-bezel bezel-list-new (_fun _bezel-handle -> _bezel-handle))
+(define-bezel bezel-table-new (_fun _bezel-handle -> _bezel-handle))
 
 ; ---- QWidget shared API ----------------------------------------------------------
 (define-bezel bezel-widget-show (_fun _bezel-handle -> _int))
@@ -103,6 +104,16 @@
 ;; (handle, int* len_out) -> PNG bytes pointer (caller frees via bezel-free).
 (define-bezel bezel-widget-grab-png
   (_fun _bezel-handle _pointer -> _pointer))
+(define-bezel bezel-widget-set-tooltip (_fun _bezel-handle _string/utf-8 -> _int))
+(define-bezel bezel-widget-tooltip (_fun _bezel-handle -> _pointer))
+(define-bezel bezel-widget-set-focus (_fun _bezel-handle -> _int))
+(define-bezel bezel-widget-is-visible (_fun _bezel-handle -> _int))
+(define-bezel bezel-window-title (_fun _bezel-handle -> _pointer))
+(define-bezel bezel-widget-width (_fun _bezel-handle -> _int))
+(define-bezel bezel-widget-height (_fun _bezel-handle -> _int))
+(define-bezel bezel-widget-x (_fun _bezel-handle -> _int))
+(define-bezel bezel-widget-y (_fun _bezel-handle -> _int))
+(define-bezel bezel-widget-center (_fun _bezel-handle -> _int))
 
 ; ---- value API --------------------------------------------------------------------
 (define-bezel bezel-widget-set-text (_fun _bezel-handle _string/utf-8 -> _int))
@@ -122,6 +133,32 @@
 (define-bezel bezel-list-current-text (_fun _bezel-handle -> _pointer))
 (define-bezel bezel-widget-set-placeholder (_fun _bezel-handle _string/utf-8 -> _int))
 (define-bezel bezel-widget-set-readonly (_fun _bezel-handle _int -> _int))
+(define-bezel bezel-table-set-dimensions (_fun _bezel-handle _int _int -> _int))
+(define-bezel bezel-table-row-count (_fun _bezel-handle -> _int))
+(define-bezel bezel-table-column-count (_fun _bezel-handle -> _int))
+(define-bezel bezel-table-set-header-labels (_fun _bezel-handle _string/utf-8 -> _int))
+(define-bezel bezel-table-set-cell-text (_fun _bezel-handle _int _int _string/utf-8 -> _int))
+(define-bezel bezel-table-cell-text (_fun _bezel-handle _int _int -> _pointer))
+(define-bezel bezel-tree-new (_fun _bezel-handle -> _bezel-handle))
+(define-bezel bezel-tree-column-count (_fun _bezel-handle -> _int))
+(define-bezel bezel-tree-set-header-labels (_fun _bezel-handle _string/utf-8 -> _int))
+(define-bezel bezel-tree-add (_fun _bezel-handle _string/utf-8 -> _int))
+(define-bezel bezel-tree-count (_fun _bezel-handle -> _int))
+(define-bezel bezel-tree-add-child (_fun _bezel-handle _int _string/utf-8 -> _int))
+(define-bezel bezel-tree-child-count (_fun _bezel-handle _int -> _int))
+(define-bezel bezel-tree-item-text (_fun _bezel-handle _int _int -> _pointer))
+(define-bezel bezel-tree-set-item-text (_fun _bezel-handle _int _int _string/utf-8 -> _int))
+(define-bezel bezel-tree-child-text (_fun _bezel-handle _int _int _int -> _pointer))
+(define-bezel bezel-tree-set-child-text (_fun _bezel-handle _int _int _int _string/utf-8 -> _int))
+(define-bezel bezel-tree-current-row (_fun _bezel-handle -> _int))
+(define-bezel bezel-tree-select (_fun _bezel-handle _int -> _int))
+(define-bezel bezel-tree-set-item-expanded (_fun _bezel-handle _int _int -> _int))
+(define-bezel bezel-tree-clear (_fun _bezel-handle -> _int))
+(define-bezel bezel-dateedit-new (_fun _bezel-handle -> _bezel-handle))
+(define-bezel bezel-dateedit-set-date (_fun _bezel-handle _int _int _int -> _int))
+(define-bezel bezel-dateedit-date (_fun _bezel-handle -> _int))
+(define-bezel bezel-dateedit-set-calendar-popup (_fun _bezel-handle _int -> _int))
+(define-bezel bezel-dateedit-set-display-format (_fun _bezel-handle _string/utf-8 -> _int))
 
 ; ---- layouts ------------------------------------------------------------------------
 (define-bezel bezel-vbox-new (_fun -> _bezel-handle))
@@ -144,11 +181,29 @@
 (define-bezel bezel-menu-add (_fun _bezel-handle _string/utf-8 -> _bezel-handle))
 (define-bezel bezel-menu-action (_fun _bezel-handle _string/utf-8 -> _bezel-handle))
 (define-bezel bezel-menu-separator (_fun _bezel-handle -> _bezel-handle))
+(define-bezel bezel-action-set-shortcut (_fun _bezel-handle _string/utf-8 -> _int))
+(define-bezel bezel-window-statusbar (_fun _bezel-handle -> _bezel-handle))
+(define-bezel bezel-status-show-message (_fun _bezel-handle _string/utf-8 _int -> _int))
+(define-bezel bezel-status-clear-message (_fun _bezel-handle -> _int))
+(define-bezel bezel-status-current-message (_fun _bezel-handle -> _pointer))
+(define-bezel bezel-window-toolbar (_fun _bezel-handle _string/utf-8 -> _bezel-handle))
+(define-bezel bezel-toolbar-add-action (_fun _bezel-handle _string/utf-8 -> _bezel-handle))
+(define-bezel bezel-clipboard-set-text (_fun _string/utf-8 -> _int))
+(define-bezel bezel-clipboard-text (_fun -> _pointer))
+(define-bezel bezel-tray-new (_fun _string/utf-8 _string/utf-8 -> _bezel-handle))
+(define-bezel bezel-tray-set-tooltip (_fun _bezel-handle _string/utf-8 -> _int))
+(define-bezel bezel-tray-set-visible (_fun _bezel-handle _int -> _int))
+(define-bezel bezel-tray-show-message (_fun _bezel-handle _string/utf-8 _string/utf-8 _int _int -> _int))
+(define-bezel bezel-tray-set-menu (_fun _bezel-handle _bezel-handle -> _int))
 
 ; ---- dialogs ----------------------------------------------------------------------------
 (define-bezel bezel-msg-information (_fun _bezel-handle _string/utf-8 _string/utf-8 -> _int))
 (define-bezel bezel-msg-warning (_fun _bezel-handle _string/utf-8 _string/utf-8 -> _int))
 (define-bezel bezel-msg-question (_fun _bezel-handle _string/utf-8 _string/utf-8 -> _int))
+(define-bezel bezel-get-open-file-name
+  (_fun _bezel-handle _string/utf-8 _string/utf-8 _string/utf-8 -> _pointer))
+(define-bezel bezel-get-save-file-name
+  (_fun _bezel-handle _string/utf-8 _string/utf-8 _string/utf-8 -> _pointer))
 
 ; ---- signals --------------------------------------------------------------------------------
 (define-bezel bezel-connect (_fun _bezel-handle _string/utf-8 -> _int64))

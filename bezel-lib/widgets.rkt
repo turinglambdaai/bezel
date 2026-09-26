@@ -19,6 +19,9 @@
          make-slider
          make-progress
          make-list-widget
+         make-table-widget
+         make-tree-widget
+         make-date-edit
 
          widget-show!
          widget-hide!
@@ -29,6 +32,16 @@
          widget-move!
          set-window-title!
          set-widget-stylesheet!
+         set-tooltip!
+         widget-tooltip
+         widget-focus!
+         widget-visible?
+         widget-window-title
+         widget-width
+         widget-height
+         widget-x
+         widget-y
+         center-widget!
 
          widget-set-text!
          widget-text
@@ -48,6 +61,33 @@
          set-placeholder!
          set-readonly!
 
+         table-set-dimensions!
+         table-row-count
+         table-column-count
+         table-set-header-labels!
+         table-set-cell-text!
+         table-cell-text
+
+         tree-set-header-labels!
+         tree-column-count
+         tree-add!
+         tree-count
+         tree-add-child!
+         tree-child-count
+         tree-item-text
+         tree-set-item-text!
+         tree-child-text
+         tree-set-child-text!
+         tree-current-row
+         tree-select!
+         tree-set-item-expanded!
+         tree-clear!
+
+         dateedit-set-date!
+         dateedit-date
+         dateedit-set-calendar-popup!
+         dateedit-set-display-format!
+
          widget-grab-png)
 
 (require ffi/unsafe
@@ -65,6 +105,18 @@
   (wrap-handle (ok-handle who (build (and parent (ptr-of parent))))
                'widget (not parent)))
 
+;; Constructors accept the parent positionally (make-label "x" win) or as
+;; the #:parent keyword (make-label "x" #:parent win). Passing both is an
+;; error — silent precedence would hide copy-paste mistakes.
+(define (resolve-parent-arg who positional kw)
+  (when (and positional kw)
+    (raise
+     (exn:fail:bezel
+      (format "bezel: ~a: parent given twice — pass it positionally or with #:parent, not both"
+              who)
+      (current-continuation-marks))))
+  (or kw positional))
+
 ;; ---- constructors ---------------------------------------------------------
 
 ;; (make-window #:title "..." #:size '(w h) #:stylesheet "qss")
@@ -78,41 +130,67 @@
   (when stylesheet (set-widget-stylesheet! win stylesheet))
   win)
 
-(define (make-widget [parent #f])
-  (spawn 'make-widget (lambda (p) (bezel-widget-new p)) parent))
+(define (make-widget [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-widget (lambda (p) (bezel-widget-new p))
+         (resolve-parent-arg 'make-widget parent kw-parent)))
 
-(define (make-label text [parent #f])
-  (spawn 'make-label (lambda (p) (bezel-label-new text p)) parent))
+(define (make-label text [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-label (lambda (p) (bezel-label-new text p))
+         (resolve-parent-arg 'make-label parent kw-parent)))
 
-(define (make-button text [parent #f])
-  (spawn 'make-button (lambda (p) (bezel-button-new text p)) parent))
+(define (make-button text [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-button (lambda (p) (bezel-button-new text p))
+         (resolve-parent-arg 'make-button parent kw-parent)))
 
-(define (make-checkbox text [parent #f])
-  (spawn 'make-checkbox (lambda (p) (bezel-checkbox-new text p)) parent))
+(define (make-checkbox text [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-checkbox (lambda (p) (bezel-checkbox-new text p))
+         (resolve-parent-arg 'make-checkbox parent kw-parent)))
 
-(define (make-line-edit [text ""] [parent #f])
-  (spawn 'make-line-edit (lambda (p) (bezel-lineedit-new text p)) parent))
+(define (make-line-edit [text ""] [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-line-edit (lambda (p) (bezel-lineedit-new text p))
+         (resolve-parent-arg 'make-line-edit parent kw-parent)))
 
-(define (make-text-edit [parent #f])
-  (spawn 'make-text-edit (lambda (p) (bezel-textedit-new p)) parent))
+(define (make-text-edit [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-text-edit (lambda (p) (bezel-textedit-new p))
+         (resolve-parent-arg 'make-text-edit parent kw-parent)))
 
-(define (make-combo [parent #f])
-  (spawn 'make-combo (lambda (p) (bezel-combo-new p)) parent))
+(define (make-combo [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-combo (lambda (p) (bezel-combo-new p))
+         (resolve-parent-arg 'make-combo parent kw-parent)))
 
-(define (make-spin-box [parent #f])
-  (spawn 'make-spin-box (lambda (p) (bezel-spinbox-new p)) parent))
+(define (make-spin-box [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-spin-box (lambda (p) (bezel-spinbox-new p))
+         (resolve-parent-arg 'make-spin-box parent kw-parent)))
 
 ;; (make-slider #:vertical? #t) for a vertical slider.
-(define (make-slider #:vertical? [vertical? #f] [parent #f])
-  (spawn 'make-slider (lambda (p) (bezel-slider-new (if vertical? 1 0) p)) parent))
+(define (make-slider #:vertical? [vertical? #f] [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-slider (lambda (p) (bezel-slider-new (if vertical? 1 0) p))
+         (resolve-parent-arg 'make-slider parent kw-parent)))
 
-(define (make-progress [parent #f])
-  (spawn 'make-progress (lambda (p) (bezel-progress-new p)) parent))
+(define (make-progress [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-progress (lambda (p) (bezel-progress-new p))
+         (resolve-parent-arg 'make-progress parent kw-parent)))
 
 ;; Named make-list-widget (not make-list) to avoid clashing with
 ;; racket/list's make-list.
-(define (make-list-widget [parent #f])
-  (spawn 'make-list-widget (lambda (p) (bezel-list-new p)) parent))
+(define (make-list-widget [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-list-widget (lambda (p) (bezel-list-new p))
+         (resolve-parent-arg 'make-list-widget parent kw-parent)))
+
+;; QTableWidget — see the table-* API at the bottom of this module.
+(define (make-table-widget [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-table-widget (lambda (p) (bezel-table-new p))
+         (resolve-parent-arg 'make-table-widget parent kw-parent)))
+
+;; QTreeWidget — items are addressed by top-level row (and child row).
+(define (make-tree-widget [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-tree-widget (lambda (p) (bezel-tree-new p))
+         (resolve-parent-arg 'make-tree-widget parent kw-parent)))
+
+;; QDateEdit — dates as (year month day) integers; see dateedit-*.
+(define (make-date-edit [parent #f] #:parent [kw-parent #f])
+  (spawn 'make-date-edit (lambda (p) (bezel-dateedit-new p))
+         (resolve-parent-arg 'make-date-edit parent kw-parent)))
 
 ;; ---- QWidget shared API ------------------------------------------------------
 
@@ -156,6 +234,67 @@
 (define (set-widget-stylesheet! w qss)
   (require-alive! 'set-widget-stylesheet! w)
   (ok! 'set-widget-stylesheet! (bezel-widget-set-stylesheet (ptr-of w) qss)))
+
+;; ---- tooltips ---------------------------------------------------------------
+
+(define (set-tooltip! w text)
+  (require-alive! 'set-tooltip! w)
+  (ok! 'set-tooltip! (bezel-widget-set-tooltip (ptr-of w) text)))
+
+(define (widget-tooltip w)
+  (require-alive! 'widget-tooltip w)
+  (define p (ok-string 'widget-tooltip (bezel-widget-tooltip (ptr-of w))))
+  (begin0 (cstring->string/utf8 p)
+    (bezel-free p)))
+
+;; Give the widget keyboard focus (menu shortcuts need a focused window).
+(define (widget-focus! w)
+  (require-alive! 'widget-focus! w)
+  (ok! 'widget-focus! (bezel-widget-set-focus (ptr-of w))))
+
+(define (widget-visible? w)
+  (require-alive! 'widget-visible? w)
+  (define r (bezel-widget-is-visible (ptr-of w)))
+  (cond [(= r -1) (raise-bezel-error 'widget-visible?)]
+        [(= r 1) #t] [else #f]))
+
+;; Read back a top-level window's title (empty string for plain widgets).
+(define (widget-window-title w)
+  (require-alive! 'widget-window-title w)
+  (define p (ok-string 'widget-window-title (bezel-window-title (ptr-of w))))
+  (begin0 (cstring->string/utf8 p)
+    (bezel-free p)))
+
+;; ---- geometry ----------------------------------------------------------------
+;;
+;; Like widget-value: -1 legitimately means "no selection"-style values
+;; never occur here, so -1 is an error only when the shim also produced
+;; a fresh error message (dead/unknown handle).
+
+(define (geometry-ref who r)
+  (when (and (= r -1) (last-error)) (raise-bezel-error who))
+  r)
+
+(define (widget-width w)
+  (require-alive! 'widget-width w)
+  (geometry-ref 'widget-width (bezel-widget-width (ptr-of w))))
+
+(define (widget-height w)
+  (require-alive! 'widget-height w)
+  (geometry-ref 'widget-height (bezel-widget-height (ptr-of w))))
+
+(define (widget-x w)
+  (require-alive! 'widget-x w)
+  (geometry-ref 'widget-x (bezel-widget-x (ptr-of w))))
+
+(define (widget-y w)
+  (require-alive! 'widget-y w)
+  (geometry-ref 'widget-y (bezel-widget-y (ptr-of w))))
+
+;; Center inside the parent widget, or on the screen when top-level.
+(define (center-widget! w)
+  (require-alive! 'center-widget! w)
+  (ok! 'center-widget! (bezel-widget-center (ptr-of w))))
 
 ;; ---- value API ------------------------------------------------------------------
 
@@ -240,6 +379,135 @@
 (define (set-readonly! w readonly?)
   (require-alive! 'set-readonly! w)
   (ok! 'set-readonly! (bezel-widget-set-readonly (ptr-of w) (if readonly? 1 0))))
+
+;; ---- tables --------------------------------------------------------------------
+;;
+;; QTableWidget with plain-text cells. Header labels use Qt's
+;; '\n'-separated convention: (table-set-header-labels! t "Name\nScore").
+
+(define (table-set-dimensions! t rows cols)
+  (require-alive! 'table-set-dimensions! t)
+  (ok! 'table-set-dimensions! (bezel-table-set-dimensions (ptr-of t) rows cols)))
+
+(define (table-row-count t)
+  (require-alive! 'table-row-count t)
+  (geometry-ref 'table-row-count (bezel-table-row-count (ptr-of t))))
+
+(define (table-column-count t)
+  (require-alive! 'table-column-count t)
+  (geometry-ref 'table-column-count (bezel-table-column-count (ptr-of t))))
+
+(define (table-set-header-labels! t labels)
+  (require-alive! 'table-set-header-labels! t)
+  (ok! 'table-set-header-labels! (bezel-table-set-header-labels (ptr-of t) labels)))
+
+(define (table-set-cell-text! t row col text)
+  (require-alive! 'table-set-cell-text! t)
+  (ok! 'table-set-cell-text! (bezel-table-set-cell-text (ptr-of t) row col text)))
+
+(define (table-cell-text t row col)
+  (require-alive! 'table-cell-text t)
+  (define p (ok-string 'table-cell-text (bezel-table-cell-text (ptr-of t) row col)))
+  (begin0 (cstring->string/utf8 p)
+    (bezel-free p)))
+
+;; ---- trees --------------------------------------------------------------------
+;;
+;; QTreeWidget with row-addressed items: QTreeWidgetItem is not a QObject,
+;; so it never gets a handle. Item and header texts use Qt's
+;; '\n'-separated per-column convention (tree-add! t "Name\nSize").
+
+(define (tree-set-header-labels! t labels)
+  (require-alive! 'tree-set-header-labels! t)
+  (ok! 'tree-set-header-labels! (bezel-tree-set-header-labels (ptr-of t) labels)))
+
+(define (tree-column-count t)
+  (require-alive! 'tree-column-count t)
+  (geometry-ref 'tree-column-count (bezel-tree-column-count (ptr-of t))))
+
+;; Add a top-level item; returns its row index.
+(define (tree-add! t text)
+  (require-alive! 'tree-add! t)
+  (geometry-ref 'tree-add! (bezel-tree-add (ptr-of t) text)))
+
+(define (tree-count t)
+  (require-alive! 'tree-count t)
+  (geometry-ref 'tree-count (bezel-tree-count (ptr-of t))))
+
+;; Add a child under top-level `row`; returns the child's index within it.
+(define (tree-add-child! t row text)
+  (require-alive! 'tree-add-child! t)
+  (geometry-ref 'tree-add-child! (bezel-tree-add-child (ptr-of t) row text)))
+
+(define (tree-child-count t row)
+  (require-alive! 'tree-child-count t)
+  (geometry-ref 'tree-child-count (bezel-tree-child-count (ptr-of t) row)))
+
+(define (tree-item-text t row [col 0])
+  (require-alive! 'tree-item-text t)
+  (define p (ok-string 'tree-item-text (bezel-tree-item-text (ptr-of t) row col)))
+  (begin0 (cstring->string/utf8 p)
+    (bezel-free p)))
+
+(define (tree-set-item-text! t row col text)
+  (require-alive! 'tree-set-item-text! t)
+  (ok! 'tree-set-item-text! (bezel-tree-set-item-text (ptr-of t) row col text)))
+
+(define (tree-child-text t row child [col 0])
+  (require-alive! 'tree-child-text t)
+  (define p (ok-string 'tree-child-text (bezel-tree-child-text (ptr-of t) row child col)))
+  (begin0 (cstring->string/utf8 p)
+    (bezel-free p)))
+
+(define (tree-set-child-text! t row child col text)
+  (require-alive! 'tree-set-child-text! t)
+  (ok! 'tree-set-child-text! (bezel-tree-set-child-text (ptr-of t) row child col text)))
+
+(define (tree-current-row t)
+  (require-alive! 'tree-current-row t)
+  ;; -1 legitimately means "no selection"; only -1 with a fresh shim
+  ;; error is a failure (dead handle).
+  (value-or-error 'tree-current-row (bezel-tree-current-row (ptr-of t))))
+
+(define (tree-select! t row)
+  (require-alive! 'tree-select! t)
+  (ok! 'tree-select! (bezel-tree-select (ptr-of t) row)))
+
+(define (tree-set-item-expanded! t row expanded?)
+  (require-alive! 'tree-set-item-expanded! t)
+  (ok! 'tree-set-item-expanded!
+       (bezel-tree-set-item-expanded (ptr-of t) row (if expanded? 1 0))))
+
+(define (tree-clear! t)
+  (require-alive! 'tree-clear! t)
+  (ok! 'tree-clear! (bezel-tree-clear (ptr-of t))))
+
+;; ---- date editor ---------------------------------------------------------------
+;;
+;; (dateedit-set-date! e 2026 9 24) / (dateedit-date e) => '(2026 9 24).
+;; The shim packs the date as y*10000+m*100+d; years 1-9999 keep that
+;; positive, so -1 remains the error sentinel.
+
+(define (dateedit-set-date! e year month day)
+  (require-alive! 'dateedit-set-date! e)
+  (ok! 'dateedit-set-date! (bezel-dateedit-set-date (ptr-of e) year month day)))
+
+(define (dateedit-date e)
+  (require-alive! 'dateedit-date e)
+  (define packed (geometry-ref 'dateedit-date (bezel-dateedit-date (ptr-of e))))
+  (list (quotient packed 10000)
+        (remainder (quotient packed 100) 100)
+        (remainder packed 100)))
+
+(define (dateedit-set-calendar-popup! e popup?)
+  (require-alive! 'dateedit-set-calendar-popup! e)
+  (ok! 'dateedit-set-calendar-popup!
+       (bezel-dateedit-set-calendar-popup (ptr-of e) (if popup? 1 0))))
+
+;; Qt display format, e.g. "yyyy-MM-dd".
+(define (dateedit-set-display-format! e format)
+  (require-alive! 'dateedit-set-display-format! e)
+  (ok! 'dateedit-set-display-format! (bezel-dateedit-set-display-format (ptr-of e) format)))
 
 ;; ---- verification ----------------------------------------------------------------
 

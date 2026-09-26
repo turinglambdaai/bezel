@@ -287,6 +287,126 @@ jobs:
           BEZEL_REQUIRE_PACKAGED_RUNTIME: '1'
         run: racket scripts/native-smoke.rkt
 
+      - name: Package a demo application
+        run: raco bezel package --entry scripts/app-smoke.rkt --name bezel-demo --dest app-dist
+
+      - name: Run the packaged application headlessly
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            exe=./app-dist/bezel-demo/bezel-demo.exe
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            exe=./app-dist/bezel-demo/bezel-demo.app/Contents/MacOS/bin/bezel-demo
+          else
+            exe=./app-dist/bezel-demo/bin/bezel-demo
+          fi
+          "$exe"
+          code=$?
+          echo "packaged app exit code: $code"
+          exit $code
+
+      # ---- platform installers + silent self-update ----------------------
+
+      - name: Install Inno Setup (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Fetch appimagetool (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          curl -sSL -o appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+          echo "APPIMAGETOOL=$PWD/appimagetool" >> "$GITHUB_ENV"
+
+      - name: Build the platform installer
+        run: raco bezel package --entry scripts/app-smoke.rkt --name bezel-demo --dest app-dist --app-version 1.0.0 --installer
+
+      - name: Verify the installer artifact
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            ls -la app-dist/*-setup.exe
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            ls -la app-dist/*.dmg
+            hdiutil verify app-dist/*.dmg
+          else
+            ls -la app-dist/*.AppImage
+          fi
+
+      - name: Silent install and run (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $installer = (Get-ChildItem app-dist -Filter *-setup.exe).FullName
+          Start-Process -Wait -FilePath $installer -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/DIR=$PWD\installed"
+          & "$PWD\installed\bezel-demo.exe"
+          if ($LASTEXITCODE -ne 0) { throw "installed app exited $LASTEXITCODE" }
+
+      - name: Run from the AppImage (Linux)
+        if: runner.os == 'Linux'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          chmod +x app-dist/*.AppImage
+          ./app-dist/*.AppImage --appimage-extract-and-run
+          code=$?
+          echo "AppImage exit code: $code"
+          exit $code
+
+      - name: Mount the dmg and inspect (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          hdiutil attach app-dist/*.dmg -mountpoint /Volumes/bezel-demo-test -nobrowse
+          ls /Volumes/bezel-demo-test/bezel-demo   # staged folder layout
+          ls /Volumes/bezel-demo-test/bezel-demo/bezel-demo.app
+          test -L /Volumes/bezel-demo-test/Applications \
+            || { echo "drag-to-install symlink missing"; exit 1; }
+          hdiutil detach /Volumes/bezel-demo-test
+
+      - name: Self-update end to end (v1 -> v2)
+        shell: bash
+        timeout-minutes: 6
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          raco bezel package --entry scripts/app-smoke.rkt --name bezel-demo --dest app-dist2 --app-version 2.0.0
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            EXE=app-dist/bezel-demo/bezel-demo.exe
+            powershell -Command "Compress-Archive -Path app-dist2/bezel-demo -DestinationPath update.zip -Force"
+            export BEZEL_SMOKE_MARKER="$(cygpath -w "$PWD/marker.txt")"
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            EXE=app-dist/bezel-demo/bezel-demo.app/Contents/MacOS/bin/bezel-demo
+            ditto -c -k --keepParent app-dist2/bezel-demo update.zip
+            export BEZEL_SMOKE_MARKER="$PWD/marker.txt"
+          else
+            EXE=app-dist/bezel-demo/bin/bezel-demo
+            (cd app-dist2 && zip -qr ../update.zip bezel-demo)
+            export BEZEL_SMOKE_MARKER="$PWD/marker.txt"
+          fi
+          racket scripts/make-feed.rkt update.zip 2.0.0 > update-feed.json
+          cat update-feed.json
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            FEED="$(cygpath -m "$PWD/update-feed.json")"
+          else
+            FEED="$PWD/update-feed.json"
+          fi
+          BEZEL_SMOKE_FEED="file:///$FEED" "$EXE" > v1.log 2>&1 || true
+          echo "--- v1.log ---"
+          cat v1.log
+          ok=0
+          for i in $(seq 1 60); do
+            if [[ -f marker.txt ]]; then ok=1; break; fi
+            sleep 1
+          done
+          echo "marker: $(cat marker.txt 2>/dev/null || echo MISSING)"
+          cat app-dist/.bezel-swap.log 2>/dev/null || true
+          [[ $ok == 1 && "$(cat marker.txt)" == "2.0.0" ]]
+
   docs:
     runs-on: ubuntu-latest
     timeout-minutes: 10

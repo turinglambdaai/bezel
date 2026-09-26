@@ -1,0 +1,18 @@
+{
+  "class": "QTabWidget",
+  "module": "tabs",
+  "header": "QTabWidget",
+  "constructors": [
+    { "c-name": "tabs-new", "args": ["parent"] }
+  ],
+  "methods": [
+    { "c-name": "tabs-add",              "qt": "addTab",           "args": ["widget", "string"], "ret": "int" },
+    { "c-name": "tabs-remove-tab",       "qt": "removeTab",        "args": ["int"] },
+    { "c-name": "tabs-count",            "qt": "count",            "ret": "int" },
+    { "c-name": "tabs-current-index",    "qt": "currentIndex",     "ret": "int" },
+    { "c-name": "tabs-set-current-index","qt": "setCurrentIndex",  "args": ["int"] },
+    { "c-name": "tabs-tab-text",         "qt": "tabText",          "args": ["int"], "ret": "string" },
+    { "c-name": "tabs-set-tab-text",     "qt": "setTabText",       "args": ["int", "string"] }
+  ],
+  "signals": ["currentChanged(int)", "tabCloseRequested(int)"]
+}
